@@ -1,0 +1,50 @@
+#!/usr/bin/env bash
+# Example work-lab config
+# Copyright (c) 2026 Ryan Snodgrass. MIT License.
+# Copy to ~/.config/work-lab/config
+#
+# This file is sourced by work-lab before running commands.
+# Set environment variables to customize behavior.
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Projects directory
+# ─────────────────────────────────────────────────────────────────────────────
+# Where your projects live on the host. Mounted to /workspaces/projects.
+# Default: $HOME/projects
+#
+# export WORK_LAB_PROJECTS_DIR="$HOME/Code"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Docker image
+# ─────────────────────────────────────────────────────────────────────────────
+# Custom image to use instead of the default.
+# Default: ghcr.io/modern-tooling/work-lab:latest
+#
+# export WORK_LAB_IMAGE="my-registry/my-image:v1.2.3"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Additional mounts
+# ─────────────────────────────────────────────────────────────────────────────
+# Mount additional files/directories into the container.
+# Format: "source:target"
+#
+# Read-only mounts (for configs you don't want agents to modify):
+WORK_LAB_MOUNTS_RO=(
+  # Git config (user name, email, aliases)
+  # "$HOME/.gitconfig:/home/vscode/.gitconfig"
+
+  # Claude config (read-only access to settings)
+  # "$HOME/.claude:/home/vscode/.claude-host"
+
+  # SSH public keys only (not private keys!)
+  # "$HOME/.ssh/id_ed25519.pub:/home/vscode/.ssh/id_ed25519.pub"
+)
+
+# Read-write mounts (for state that should persist):
+WORK_LAB_MOUNTS_RW=(
+  # Persistent cache directory
+  # "$HOME/.cache/work-lab:/home/vscode/.cache/work-lab"
+
+  # Shared npm cache
+  # "$HOME/.npm:/home/vscode/.npm"
+)
