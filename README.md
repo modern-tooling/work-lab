@@ -75,9 +75,11 @@ To use: `export PATH="$PATH:/path/to/work-lab/bin"`
 
 ```mermaid
 flowchart TB
-    Host[Host filesystem<br/>~/projects/foo]
     WL[work-lab container<br/>think + edit + run]
-    Host -->|bind mount| WL
+    Host[(Host filesystem<br/>~/projects/foo)]
+    WL -->|bind mount| Host
+    style WL fill:#4a9eff,stroke:#2d7ad9,color:#fff
+    style Host fill:#f5f5f5,stroke:#999
 ```
 
 **When to use:** Project has no devcontainer, or you don't need its build environment.
@@ -94,11 +96,14 @@ Two containers, both mounting the same project from your host filesystem.
 
 ```mermaid
 flowchart TB
-    Host[Host filesystem<br/>~/projects/foo]
     WL[work-lab container<br/>think + agent]
     Proj[project container<br/>build + run + test]
-    Host -->|bind mount| WL
-    Host -->|bind mount| Proj
+    Host[(Host filesystem<br/>~/projects/foo)]
+    WL -->|bind mount| Host
+    Proj -->|bind mount| Host
+    style WL fill:#4a9eff,stroke:#2d7ad9,color:#fff
+    style Proj fill:#10b981,stroke:#059669,color:#fff
+    style Host fill:#f5f5f5,stroke:#999
 ```
 
 **When to use:** Project has its own devcontainer with specific build tools, services, or runtime.
