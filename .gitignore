@@ -1,11 +1,5 @@
 # work-lab .gitignore
 
-# Local customizations (not checked in)
-.local/
-local/
-*.local
-*.local.*
-
 # Editor/IDE
 .idea/
 *.swp

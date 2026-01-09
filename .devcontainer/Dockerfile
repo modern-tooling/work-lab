@@ -1,5 +1,6 @@
 # work-lab devcontainer
-# A calm, boring, reliable environment for experimental work.
+# Copyright (c) 2026 Ryan Snodgrass. MIT License.
+# A container-based lab for humans and AI coding agents.
 
 FROM mcr.microsoft.com/devcontainers/base:ubuntu-24.04
 
