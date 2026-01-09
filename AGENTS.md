@@ -21,14 +21,19 @@ References:
 
 - Version is defined in `bin/work-lab` as `VERSION="x.y.z"`
 - Uses beads-style versioning: `0.<release>.0`
-  - Middle number increments for each release (0.1.0 → 0.2.0 → 0.3.0)
-  - Last number reserved for patches on a released version (0.2.0 → 0.2.1)
+  - Middle number increments for each release (0.1.0 → 0.2.0 → 0.3.0 → 0.4.0)
+  - Patch releases (x.y.1) are VERY RARE - only for critical hotfixes
   - First number reserved for major/stable releases
 - Keep `CHANGELOG.md` up to date with each release
 
 ## Releases
 
-**IMPORTANT: Agents MUST NOT release without explicit human confirmation.** Always ask the user before creating tags, pushing releases, or updating the Homebrew tap.
+**IMPORTANT: Agents MUST get explicit human confirmation BEFORE:**
+1. Deciding what version number to use (always ask!)
+2. Creating tags or pushing releases
+3. Updating the Homebrew tap
+
+**Version decision rule:** When in doubt, bump the middle number (0.3.0 → 0.4.0). Patch releases are discouraged.
 
 When releasing a new version (after human approval):
 

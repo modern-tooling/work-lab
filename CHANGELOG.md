@@ -6,6 +6,20 @@ All notable changes to work-lab will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.0] - 2026-01-09
+
+### Fixed
+
+- Multi-architecture Docker builds (amd64 + arm64 for Apple Silicon)
+- Go download now detects architecture instead of hardcoding amd64
+- `wl up` error handling shows helpful messages for network failures
+- `wl ps` shows current project even when both containers stopped
+
+### Changed
+
+- Use pre-built GHCR image instead of building from Dockerfile
+- Added CI workflow for Docker build testing
+
 ## [0.3.0] - 2026-01-09
 
 ### Added
