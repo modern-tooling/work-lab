@@ -34,6 +34,18 @@ It provides a consistent shell with your tools, independent of whatever project 
 
 ---
 
+## Prerequisites
+
+| Requirement | Purpose | Install |
+|-------------|---------|---------|
+| [Docker](https://docs.docker.com/get-docker/) | Container runtime | `brew install --cask docker` |
+| [devcontainer CLI](https://github.com/devcontainers/cli) | Start containers from CLI | `npm install -g @devcontainers/cli` |
+
+Optional but recommended:
+- [Homebrew](https://brew.sh/) — For easy installation on macOS/Linux
+
+---
+
 ## Installation
 
 Choose your preferred method:
@@ -84,11 +96,19 @@ claude    # or opencode, aider, etc.
 ### Helper commands
 
 ```bash
-work-lab up      # Start the devcontainer
-work-lab shell   # Attach an interactive shell
-work-lab tmux    # Attach to tmux session (creates 'lab' if missing)
-work-lab stop    # Stop the container
-work-lab doctor  # Check environment and configuration
+work-lab up       # Start the devcontainer
+work-lab shell    # Attach an interactive shell
+work-lab tmux     # Attach to tmux session (creates 'lab' if missing)
+work-lab stop     # Stop the container
+work-lab doctor   # Check environment and configuration
+work-lab version  # Show version information
+```
+
+**Tip:** Use the short alias `wl` (installed automatically):
+
+```bash
+wl up      # Same as: work-lab up
+wl tmux    # Same as: work-lab tmux
 ```
 
 ---
@@ -158,9 +178,19 @@ flowchart TB
 | tmux | Persistent terminal sessions |
 | git, curl, jq, ripgrep, fzf | Standard utilities |
 | Node.js 22 LTS | JavaScript runtime |
-| Claude CLI | Coding agent |
-| [Beads](https://github.com/steveyegge/beads) | Coding task management ideal for AI coding agents |
-| [Gastown](https://github.com/steveyegge/gastown) | AI coding cagent orchestrator (optional) |
+| [Claude CLI](https://github.com/anthropics/claude-code) | AI coding agent |
+| [Beads](https://github.com/steveyegge/beads) | Task management for AI coding agents |
+| [Gastown](https://github.com/steveyegge/gastown) | AI coding agent orchestrator |
+
+> **Note:** work-lab is **not** specifically for Gastown — it's a general-purpose environment for any AI coding agent. Gastown happens to be one of the best AI coding agent orchestrators as of January 2026, so it's included by default.
+
+### Example: Running Gastown
+
+```bash
+work-lab tmux                           # Attach to work-lab
+cd /workspaces/projects/your-project    # Navigate to project
+gastown                                  # Start Gastown orchestrator
+```
 
 ---
 

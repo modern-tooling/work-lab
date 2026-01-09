@@ -69,14 +69,23 @@ else
   info "Could not pull image (will build locally on first run)"
 fi
 
-# Create symlink in ~/.local/bin (XDG standard for user executables)
+# Create symlinks in ~/.local/bin (XDG standard for user executables)
 local_bin="$HOME/.local/bin"
 mkdir -p "$local_bin"
+
+# Main symlink: work-lab
 if [[ -L "$local_bin/work-lab" ]] || [[ -e "$local_bin/work-lab" ]]; then
   rm -f -- "$local_bin/work-lab"
 fi
 ln -s "$INSTALL_DIR/bin/work-lab" "$local_bin/work-lab"
 success "Symlinked to $local_bin/work-lab"
+
+# Short alias: wl
+if [[ -L "$local_bin/wl" ]] || [[ -e "$local_bin/wl" ]]; then
+  rm -f -- "$local_bin/wl"
+fi
+ln -s "$INSTALL_DIR/bin/work-lab" "$local_bin/wl"
+success "Symlinked to $local_bin/wl (short alias)"
 
 # Check if ~/.local/bin is in PATH
 if [[ ":$PATH:" != *":$local_bin:"* ]]; then
@@ -102,8 +111,8 @@ echo "========================================"
 echo ""
 echo "Quick start:"
 echo ""
-echo "  work-lab version  # Verify installation"
-echo "  work-lab doctor   # Check your environment"
-echo "  work-lab up       # Start the container"
-echo "  work-lab tmux     # Attach to tmux session"
+echo "  wl version  # Verify installation (or: work-lab version)"
+echo "  wl doctor   # Check your environment"
+echo "  wl up       # Start the container"
+echo "  wl tmux     # Attach to tmux session"
 echo ""
