@@ -285,14 +285,6 @@ flowchart TB
 
 **Result:** Agent autonomy (no permission prompts) with bounded risk (can only touch mounted project files).
 
-### Supply chain considerations
-
-The one-liner install (`curl | bash`) and `:latest` Docker tags carry inherent supply chain risks. For higher security:
-
-1. **Review before running:** Download `install.sh`, inspect it, then execute
-2. **Pin image versions:** Use specific SHA digests instead of `:latest`
-3. **Use Homebrew:** `brew install work-lab` provides formula review and checksums
-
 ---
 
 ## Design principles
