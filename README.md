@@ -214,23 +214,53 @@ To change this, edit `.devcontainer/devcontainer.json`:
 ]
 ```
 
-### User customization
+### Configuration file
 
-Customize work-lab via `~/.config/work-lab/` on your host (XDG convention):
+Customize work-lab via `~/.config/work-lab/config` (sourced shell script):
+
+```bash
+mkdir -p ~/.config/work-lab
+cat > ~/.config/work-lab/config << 'EOF'
+# Override projects directory
+export WORK_LAB_PROJECTS_DIR="$HOME/Code"
+
+# Mount configs read-only (agent can read but not modify)
+WORK_LAB_MOUNTS_RO=(
+  "$HOME/.gitconfig:/home/vscode/.gitconfig"
+  "$HOME/.claude:/home/vscode/.claude-host"
+)
+
+# Mount directories read-write (for caches, state)
+WORK_LAB_MOUNTS_RW=(
+  "$HOME/.cache/work-lab:/home/vscode/.cache"
+)
+EOF
+```
+
+**Available options:**
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `WORK_LAB_PROJECTS_DIR` | `$HOME/projects` | Host directory mounted to `/workspaces/projects` |
+| `WORK_LAB_IMAGE` | `ghcr.io/modern-tooling/work-lab:latest` | Docker image to use |
+| `WORK_LAB_MOUNTS_RO` | `()` | Array of read-only mounts (`"source:target"`) |
+| `WORK_LAB_MOUNTS_RW` | `()` | Array of read-write mounts (`"source:target"`) |
+
+**Precedence:** Environment variables > config file > defaults
+
+### Lifecycle hooks
 
 | File | When it runs |
 |------|--------------|
-| `post-create.sh` | Once, after container creation |
-| `post-start.sh` | Every time container starts |
+| `~/.config/work-lab/post-create.sh` | Once, after container creation |
+| `~/.config/work-lab/post-start.sh` | Every time container starts |
 
 **Example:** Install a custom coding agent:
 
 ```bash
-mkdir -p ~/.config/work-lab
 cat > ~/.config/work-lab/post-create.sh << 'EOF'
 #!/usr/bin/env bash
 npm install -g opencode
-cargo install --locked zellij  # install zellij tmux alternative [optional]
 EOF
 ```
 

@@ -16,6 +16,65 @@ readonly REPO_DIR="$(dirname -- "$SCRIPT_DIR")"
 # error handler for debugging
 trap 'printf "Error at line %d: exit %d\n" "$LINENO" "$?" >&2' ERR
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Configuration
+# ─────────────────────────────────────────────────────────────────────────────
+# Defaults (can be overridden by ~/.config/work-lab/config or environment)
+: "${WORK_LAB_PROJECTS_DIR:=$HOME/projects}"
+: "${WORK_LAB_IMAGE:=ghcr.io/modern-tooling/work-lab:latest}"
+
+# Additional mounts (arrays, set in config file)
+# Format: "source:target" - will be mounted read-only or read-write
+WORK_LAB_MOUNTS_RO=()    # read-only mounts
+WORK_LAB_MOUNTS_RW=()    # read-write mounts
+
+# Source user config if present (can override defaults above)
+config_file="$HOME/.config/work-lab/config"
+if [[ -f "$config_file" ]]; then
+  # shellcheck source=/dev/null
+  source "$config_file"
+fi
+
+# Export for devcontainer.json ${localEnv:...} substitution
+export WORK_LAB_PROJECTS_DIR
+export WORK_LAB_IMAGE
+
+# Build mount flags for devcontainer up
+build_mount_flags() {
+  local flags=()
+  local mount_spec source target
+
+  # Add read-only mounts
+  for mount_spec in "${WORK_LAB_MOUNTS_RO[@]}"; do
+    source="${mount_spec%%:*}"
+    target="${mount_spec#*:}"
+    # Expand ~ and $HOME
+    source="${source/#\~/$HOME}"
+    source="${source//\$HOME/$HOME}"
+    if [[ -e "$source" ]]; then
+      flags+=("--mount" "type=bind,source=$source,target=$target,readonly")
+    else
+      echo "  [warn] skipping mount (source not found): $source" >&2
+    fi
+  done
+
+  # Add read-write mounts
+  for mount_spec in "${WORK_LAB_MOUNTS_RW[@]}"; do
+    source="${mount_spec%%:*}"
+    target="${mount_spec#*:}"
+    # Expand ~ and $HOME
+    source="${source/#\~/$HOME}"
+    source="${source//\$HOME/$HOME}"
+    if [[ -e "$source" ]]; then
+      flags+=("--mount" "type=bind,source=$source,target=$target")
+    else
+      echo "  [warn] skipping mount (source not found): $source" >&2
+    fi
+  done
+
+  printf '%s\n' "${flags[@]}"
+}
+
 usage() {
   cat << EOF
 work-lab - manage the work-lab devcontainer
@@ -45,15 +104,24 @@ find_container() {
 }
 
 cmd_up() {
-  if command -v devcontainer &> /dev/null; then
-    echo "Starting devcontainer..."
-    devcontainer up --workspace-folder "$REPO_DIR"
-  else
+  if ! command -v devcontainer &> /dev/null; then
     echo "devcontainer CLI not found."
     echo "Install it with: npm install -g @devcontainers/cli"
     echo "Or open this folder in VS Code and use 'Reopen in Container'."
     exit 1
   fi
+
+  echo "Starting devcontainer..."
+
+  # Build additional mount flags from config
+  local mount_flags=()
+  if [[ ${#WORK_LAB_MOUNTS_RO[@]} -gt 0 ]] || [[ ${#WORK_LAB_MOUNTS_RW[@]} -gt 0 ]]; then
+    echo "Additional mounts:"
+    readarray -t mount_flags < <(build_mount_flags)
+  fi
+
+  # Run devcontainer up with any additional mounts
+  devcontainer up --workspace-folder "$REPO_DIR" "${mount_flags[@]}"
 }
 
 cmd_shell() {
@@ -91,7 +159,7 @@ cmd_stop() {
 }
 
 cmd_doctor() {
-  local container_id config_dir projects_dir project_count
+  local container_id config_dir project_count
 
   echo ""
   echo "work-lab doctor"
@@ -131,36 +199,56 @@ cmd_doctor() {
   fi
   echo ""
 
-  # check user config
-  echo "User config (~/.config/work-lab/):"
+  # show configuration
+  echo "Configuration:"
   config_dir="$HOME/.config/work-lab"
+  if [[ -f "$config_dir/config" ]]; then
+    echo "  [ok] config file: $config_dir/config"
+  else
+    echo "  [info] config file: not found (using defaults)"
+  fi
+  echo "  WORK_LAB_PROJECTS_DIR=$WORK_LAB_PROJECTS_DIR"
+  echo "  WORK_LAB_IMAGE=$WORK_LAB_IMAGE"
+  if [[ ${#WORK_LAB_MOUNTS_RO[@]} -gt 0 ]]; then
+    echo "  WORK_LAB_MOUNTS_RO: ${#WORK_LAB_MOUNTS_RO[@]} configured"
+    for m in "${WORK_LAB_MOUNTS_RO[@]}"; do
+      echo "    - $m (ro)"
+    done
+  fi
+  if [[ ${#WORK_LAB_MOUNTS_RW[@]} -gt 0 ]]; then
+    echo "  WORK_LAB_MOUNTS_RW: ${#WORK_LAB_MOUNTS_RW[@]} configured"
+    for m in "${WORK_LAB_MOUNTS_RW[@]}"; do
+      echo "    - $m (rw)"
+    done
+  fi
+  echo ""
+
+  # check user hooks
+  echo "User hooks (~/.config/work-lab/):"
   if [[ -d "$config_dir" ]]; then
-    echo "  [ok] directory exists"
     if [[ -f "$config_dir/post-create.sh" ]]; then
-      echo "  [ok] post-create.sh found"
+      echo "  [ok] post-create.sh"
     else
-      echo "  [info] post-create.sh not found (optional)"
+      echo "  [info] post-create.sh (not found)"
     fi
     if [[ -f "$config_dir/post-start.sh" ]]; then
-      echo "  [ok] post-start.sh found"
+      echo "  [ok] post-start.sh"
     else
-      echo "  [info] post-start.sh not found (optional)"
+      echo "  [info] post-start.sh (not found)"
     fi
   else
-    echo "  [info] not configured (optional)"
-    echo "         create with: mkdir -p ~/.config/work-lab"
+    echo "  [info] directory not found (optional)"
   fi
   echo ""
 
   # check projects mount source
   echo "Projects directory:"
-  projects_dir="$HOME/projects"
-  if [[ -d "$projects_dir" ]]; then
-    project_count=$(find "$projects_dir" -maxdepth 1 -type d 2>/dev/null | wc -l | tr -d ' ')
-    echo "  [ok] $projects_dir ($((project_count - 1)) items)"
+  if [[ -d "$WORK_LAB_PROJECTS_DIR" ]]; then
+    project_count=$(find "$WORK_LAB_PROJECTS_DIR" -maxdepth 1 -type d 2>/dev/null | wc -l | tr -d ' ')
+    echo "  [ok] $WORK_LAB_PROJECTS_DIR ($((project_count - 1)) items)"
   else
-    echo "  [warn] $projects_dir not found"
-    echo "         create it or edit devcontainer.json to change mount source"
+    echo "  [warn] $WORK_LAB_PROJECTS_DIR not found"
+    echo "         create it or set WORK_LAB_PROJECTS_DIR in config"
   fi
   echo ""
 

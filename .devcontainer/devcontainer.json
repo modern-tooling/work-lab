@@ -7,8 +7,8 @@
   "workspaceMount": "source=${localWorkspaceFolder},target=/workspaces/work-lab,type=bind,consistency=cached",
   "mounts": [
     // Mount your projects directory into the container.
-    // Adjust the host path if your projects live elsewhere.
-    "source=${localEnv:HOME}/projects,target=/workspaces/projects,type=bind,consistency=cached",
+    // Override with WORK_LAB_PROJECTS_DIR in ~/.config/work-lab/config
+    "source=${localEnv:WORK_LAB_PROJECTS_DIR:-${localEnv:HOME}/projects},target=/workspaces/projects,type=bind,consistency=cached",
     // Mount user's XDG config for work-lab customizations (optional).
     "source=${localEnv:HOME}/.config/work-lab,target=/home/vscode/.config/work-lab,type=bind,consistency=cached"
   ],
