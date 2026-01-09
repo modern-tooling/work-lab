@@ -505,6 +505,20 @@ cmd_ps() {
     fi
   done <<< "$containers"
 
+  # If we're in a project with a .devcontainer, include it even if nothing running
+  local current_project
+  current_project=$(find_git_root 2>/dev/null)
+  if [[ -n "$current_project" ]]; then
+    local has_devcontainer=0
+    if [[ -d "$current_project/.devcontainer" ]] || [[ -f "$current_project/.devcontainer.json" ]]; then
+      has_devcontainer=1
+    fi
+    # Add current project if it has a devcontainer and isn't already in the list
+    if (( has_devcontainer )) && [[ -z "${worklabs_for_project[$current_project]:-}" ]] && [[ -z "${devcontainer_for_project[$current_project]:-}" ]]; then
+      projects+=("$current_project")
+    fi
+  fi
+
   # Display grouped by project
   local project_count=${#projects[@]}
   if (( project_count == 0 )); then
@@ -600,6 +614,10 @@ cmd_ps() {
         ssh_indicator="${C_WARN}~${C_RESET}"  # sshd available, not configured
       fi
       printf "  └─ ${C_DIM}devcontainer${C_RESET}  ${C_DIM}%s${C_RESET}  ${C_PASS}●${C_RESET} %b ${C_DIM}%s${C_RESET}\n" "${dc_id:0:12}" "$ssh_indicator" "${container_name[$dc_id]}"
+    else
+      # Both stopped (current project with .devcontainer but nothing running)
+      printf "  ├─ ${C_DIM}work-lab${C_RESET}      ${C_DIM}────────────${C_RESET}  ${C_WARN}○${C_RESET}  ${C_WARN}stopped${C_RESET}\n"
+      printf "  └─ ${C_DIM}devcontainer${C_RESET}  ${C_DIM}────────────${C_RESET}  ${C_WARN}○${C_RESET}  ${C_WARN}stopped${C_RESET}\n"
     fi
   done
 
@@ -651,8 +669,25 @@ cmd_up() {
   echo ""
   activity "Starting devcontainer..."
 
-  # Run devcontainer up
-  devcontainer up --workspace-folder "$REPO_DIR" "${mount_flags[@]}"
+  # Run devcontainer up with error handling
+  local dc_output dc_exit=0
+  dc_output=$(devcontainer up --workspace-folder "$REPO_DIR" "${mount_flags[@]}" 2>&1) || dc_exit=$?
+
+  if (( dc_exit != 0 )); then
+    echo "$dc_output"
+    echo ""
+    status_fail "devcontainer up failed"
+    # detect common errors and give hints
+    if [[ "$dc_output" == *"ECONNREFUSED"* ]] || [[ "$dc_output" == *"ETIMEDOUT"* ]]; then
+      hint "Network error - check internet connection"
+      hint "GitHub may be temporarily unreachable"
+    elif [[ "$dc_output" == *"not found"* ]] || [[ "$dc_output" == *"No such"* ]]; then
+      hint "Docker may not be running"
+    fi
+    fail_exit
+  fi
+
+  echo "$dc_output"
 
   echo ""
   separator
