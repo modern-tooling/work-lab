@@ -4,6 +4,7 @@
 # Runs every time the devcontainer starts.
 
 set -Eeuo pipefail
+trap 'printf "Error at line %d: exit %d\n" "$LINENO" "$?" >&2' ERR
 
 echo ""
 echo "=========================================="
@@ -20,12 +21,16 @@ else
 fi
 echo ""
 
-# Source user's post-start customizations if present
+# Run user's post-start customizations if present
 user_post_start="$HOME/.config/work-lab/post-start.sh"
 if [[ -f "$user_post_start" ]]; then
-  echo "Sourcing $user_post_start..."
-  # shellcheck source=/dev/null
-  source "$user_post_start"
+  echo "Running $user_post_start..."
+  # Run in separate shell so user script doesn't inherit strict mode
+  if bash "$user_post_start"; then
+    echo "  [ok] User post-start completed"
+  else
+    echo "  [warn] User post-start exited with error (continuing)"
+  fi
   echo ""
 fi
 

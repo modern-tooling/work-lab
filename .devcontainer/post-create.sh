@@ -4,6 +4,7 @@
 # Runs once after the devcontainer is created.
 
 set -Eeuo pipefail
+trap 'printf "Error at line %d: exit %d\n" "$LINENO" "$?" >&2' ERR
 
 echo ""
 echo "=========================================="
@@ -21,12 +22,16 @@ echo "  beads:   $(beads --version 2>/dev/null || echo 'installed')"
 echo "  claude:  $(claude --version 2>/dev/null || echo 'installed')"
 echo ""
 
-# Source user's post-create customizations if present
+# Run user's post-create customizations if present
 user_post_create="$HOME/.config/work-lab/post-create.sh"
 if [[ -f "$user_post_create" ]]; then
-  echo "Sourcing $user_post_create..."
-  # shellcheck source=/dev/null
-  source "$user_post_create"
+  echo "Running $user_post_create..."
+  # Run in separate shell so user script doesn't inherit strict mode
+  if bash "$user_post_create"; then
+    echo "  [ok] User post-create completed"
+  else
+    echo "  [warn] User post-create exited with error (continuing)"
+  fi
   echo ""
 fi
 
