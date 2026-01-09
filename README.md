@@ -196,6 +196,8 @@ You can always update your `~/.config/work-lab/post-create.sh` to install additi
 
 > **Note:** work-lab is **not** specifically for Gastown — it's a general-purpose environment for any AI coding agent. Gastown happens to be one of the best AI coding agent orchestrators as of January 2026, so it's included by default.
 
+> **Future change:** Claude Code may be removed as a pre-installed default in a future release. You can always install it via `~/.config/work-lab/post-create.sh` if needed.
+
 ### Example: Running Gastown
 
 ```bash

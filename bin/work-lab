@@ -142,6 +142,7 @@ usage() {
   printf "  ${C_COMMAND}%-10s${C_RESET} %s\n" "ps" "List running work-lab containers"
   printf "  ${C_COMMAND}%-10s${C_RESET} %s\n" "doctor" "Check environment and configuration"
   printf "  ${C_COMMAND}%-10s${C_RESET} %s\n" "version" "Show version information"
+  printf "  ${C_COMMAND}%-14s${C_RESET} %s\n" "release-notes" "Show release notes for current version"
   printf "  ${C_COMMAND}%-10s${C_RESET} %s\n" "help" "Show this message"
   echo ""
   print_dim "Run 'work-lab up' from any git repository to start."
@@ -153,6 +154,36 @@ usage() {
 
 cmd_version() {
   printf "${C_BOLD}work-lab${C_RESET} ${C_COMMAND}%s${C_RESET}\n" "$VERSION"
+}
+
+cmd_release_notes() {
+  local url="https://api.github.com/repos/modern-tooling/work-lab/releases"
+  local releases
+
+  header "work-lab release notes"
+  printf "  ${C_LABEL}current${C_RESET}  ${C_COMMAND}v%s${C_RESET}\n\n" "$VERSION"
+
+  if ! command -v curl &>/dev/null; then
+    print_dim "curl not available"
+    hint "https://github.com/modern-tooling/work-lab/releases"
+    return
+  fi
+
+  releases=$(curl -sL "$url" 2>/dev/null)
+  if [[ -z "$releases" ]] || ! echo "$releases" | jq -e '.' &>/dev/null; then
+    print_dim "Could not fetch release notes"
+    hint "https://github.com/modern-tooling/work-lab/releases"
+    return
+  fi
+
+  # Display each release
+  echo "$releases" | jq -r '.[] | "## \(.tag_name)\n\(.body)\n"' 2>/dev/null | while IFS= read -r line; do
+    if [[ "$line" == "## v"* ]]; then
+      printf "\n${C_BOLD}${C_PRIMARY}%s${C_RESET}\n" "$line"
+    else
+      echo "$line"
+    fi
+  done
 }
 
 # Find the work-lab container (uses devcontainer's label)
@@ -554,6 +585,9 @@ case "${1:-}" in
     ;;
   version|--version|-v)
     cmd_version
+    ;;
+  release-notes)
+    cmd_release_notes
     ;;
   help|--help|-h)
     usage
