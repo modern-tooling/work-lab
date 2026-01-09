@@ -7,8 +7,8 @@ A container-based lab for humans and AI coding agents to think, plan, code, and 
 
 | Your situation | Mode | What to do |
 |----------------|------|------------|
-| Project has no devcontainer | **Standalone** | work-lab is your devcontainer |
-| Project has its own devcontainer | **Sidecar** | Run both containers side-by-side |
+| Project has no devcontainer | **Standalone** | `work-lab` is your devcontainer |
+| Project has existing [devcontainer](https://www.daytona.io/dotfiles/ultimate-guide-to-dev-containers?utm_source=chatgpt.com) | **Sidecar** | Run both containers side-by-side |
 
 > **Mental model:**
 > work-lab is where you think and operate.
@@ -17,11 +17,11 @@ A container-based lab for humans and AI coding agents to think, plan, code, and 
 
 ## What this is
 
-work-lab is an **optional, personal** environment for:
+`work-lab` is an **optional, personal** environment for:
 
 - Thinking and planning
-- Running coding agents ([Claude](https://github.com/anthropics/claude-code), [Gastown](https://github.com/steveyegge/gastown), [SageOx](https://github.com/sageox/))
-- Operating with tmux
+- Running coding agent tooling ([Claude](https://github.com/anthropics/claude-code), [Gastown](https://github.com/steveyegge/gastown), [SageOx](https://github.com/sageox/))
+- Operating with `tmux`
 - Experimenting safely
 
 It provides a consistent shell with your tools, independent of whatever project you're working on.
@@ -51,13 +51,27 @@ cd /workspaces/projects/your-project
 claude    # or opencode, aider, etc.
 ```
 
+### Using Helper script
+
+A convenience script is provided at `bin/work-lab`:
+
+```bash
+work-lab up      # Start the devcontainer
+work-lab shell   # Attach an interactive shell
+work-lab tmux    # Attach to tmux session (creates 'lab' if missing)
+work-lab stop    # Stop the container
+work-lab doctor  # Check environment and configuration
+```
+
+To use: `export PATH="$PATH:/path/to/work-lab/bin"`
+
 ---
 
 ## Usage modes
 
 ### Standalone mode
 
-work-lab **is** the devcontainer. One container does everything.
+`work-lab` **is** the devcontainer. One container does everything.
 
 ```mermaid
 flowchart TB
@@ -74,7 +88,7 @@ flowchart TB
 - Reproducible tools
 - One mental model
 
-### Sidecar mode
+### Sidecar mode (Work with existing Devcontainer)
 
 Two containers, both mounting the same project from your host filesystem.
 
@@ -114,8 +128,8 @@ flowchart TB
 | git, curl, jq, ripgrep, fzf | Standard utilities |
 | Node.js 22 LTS | JavaScript runtime |
 | Claude CLI | Coding agent |
-| Gastown | steveyegge's tool |
-| Beads | Task management |
+| [Beads](https://github.com/steveyegge/beads) | Coding task management ideal for AI coding agents |
+| [Gastown](https://github.com/steveyegge/gastown) | AI coding cagent orchestrator (optional) |
 
 ---
 
@@ -149,24 +163,11 @@ mkdir -p ~/.config/work-lab
 cat > ~/.config/work-lab/post-create.sh << 'EOF'
 #!/usr/bin/env bash
 npm install -g opencode
+cargo install --locked zellij  # install zellij tmux alternative [optional]
 EOF
 ```
 
 See `examples/` for more examples.
-
-### Helper script (optional)
-
-A convenience script is provided at `bin/work-lab`:
-
-```bash
-work-lab up      # Start the devcontainer
-work-lab shell   # Attach an interactive shell
-work-lab tmux    # Attach to tmux session (creates 'lab' if missing)
-work-lab stop    # Stop the container
-work-lab doctor  # Check environment and configuration
-```
-
-To use: `export PATH="$PATH:/path/to/work-lab/bin"`
 
 ---
 
@@ -175,5 +176,5 @@ To use: `export PATH="$PATH:/path/to/work-lab/bin"`
 1. **Boring is good.** No clever abstractions. No magic.
 2. **Optional always.** Nothing here is required.
 3. **No repo modifications.** Projects remain untouched.
-4. **Light tooling.** Only add what reduces thinking.
-5. **Clear boundaries.** work-lab thinks, project devcontainers run.
+4. **Light tooling.** Only add what reduces thinking during initial setup.
+5. **Clear boundaries.** `work-lab` provides thinking space, project devcontainers run.
