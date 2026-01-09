@@ -161,7 +161,7 @@ cmd_release_notes() {
   local releases
 
   header "work-lab release notes"
-  printf "  ${C_LABEL}current${C_RESET}  ${C_COMMAND}v%s${C_RESET}\n\n" "$VERSION"
+  printf "  ${C_LABEL}current${C_RESET}  ${C_COMMAND}v%s${C_RESET}\n" "$VERSION"
 
   if ! command -v curl &>/dev/null; then
     print_dim "curl not available"
@@ -176,12 +176,86 @@ cmd_release_notes() {
     return
   fi
 
-  # Display each release
-  echo "$releases" | jq -r '.[] | "## \(.tag_name)\n\(.body)\n"' 2>/dev/null | while IFS= read -r line; do
-    if [[ "$line" == "## v"* ]]; then
-      printf "\n${C_BOLD}${C_PRIMARY}%s${C_RESET}\n" "$line"
+  # Helper to strip markdown formatting
+  _strip_md() {
+    local s="$1"
+    s="${s//\`/}"      # backticks
+    s="${s//\*\*/}"    # bold markers
+    echo "$s"
+  }
+
+  # Format and display each release
+  local in_code_block=0
+  echo "$releases" | jq -r '.[] | "\(.tag_name)\n\(.body)\n---END---"' 2>/dev/null | while IFS= read -r line; do
+    # Version header
+    if [[ "$line" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+      local tag="$line"
+      local marker=""
+      [[ "$tag" == "v$VERSION" ]] && marker="  ${C_PASS}[current]${C_RESET}"
+      printf "\n${C_DIM}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${C_RESET}\n"
+      printf "${C_BOLD}${C_PRIMARY}%s${C_RESET}%s\n" "$tag" "$marker"
+      printf "${C_DIM}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${C_RESET}\n"
+      in_code_block=0
+    # Section end marker
+    elif [[ "$line" == "---END---" ]]; then
+      continue
+    # Code block toggle
+    elif [[ "$line" == '```'* ]]; then
+      in_code_block=$((1 - in_code_block))
+      continue
+    # Inside code block - print dimmed with indent
+    elif (( in_code_block )); then
+      printf "      ${C_DIM}%s${C_RESET}\n" "$line"
+    # H2 headers (## Something) -> Section headers
+    elif [[ "$line" =~ ^##[[:space:]](.+)$ ]]; then
+      local section="${BASH_REMATCH[1]}"
+      section=$(_strip_md "$section")
+      # Skip "What's New" - redundant
+      [[ "$section" == "What's New" ]] && continue
+      printf "\n${C_ACCENT}%s${C_RESET}\n" "${section^^}"
+    # H3 headers (### Something) -> Subsection
+    elif [[ "$line" =~ ^###[[:space:]](.+)$ ]]; then
+      local subsection="${BASH_REMATCH[1]}"
+      subsection=$(_strip_md "$subsection")
+      printf "\n  ${C_BOLD}%s${C_RESET}\n" "$subsection"
+    # Bullet points with bold labels (- **Label**: description)
+    elif [[ "$line" =~ ^-[[:space:]]\*\*([^*]+)\*\*:[[:space:]](.+)$ ]]; then
+      local label="${BASH_REMATCH[1]}"
+      local desc=$(_strip_md "${BASH_REMATCH[2]}")
+      printf "    ${C_LABEL}%-18s${C_RESET} %s\n" "$label" "$desc"
+    # Bullet points with bold labels (- **Label** description without colon)
+    elif [[ "$line" =~ ^-[[:space:]]\*\*([^*]+)\*\*[[:space:]]?(.*)$ ]]; then
+      local label="${BASH_REMATCH[1]}"
+      local desc=$(_strip_md "${BASH_REMATCH[2]}")
+      if [[ -n "$desc" ]]; then
+        printf "    ${C_LABEL}%-18s${C_RESET} %s\n" "$label" "$desc"
+      else
+        printf "    ${C_LABEL}%s${C_RESET}\n" "$label"
+      fi
+    # Plain bullet points
+    elif [[ "$line" =~ ^-[[:space:]](.+)$ ]]; then
+      local item=$(_strip_md "${BASH_REMATCH[1]}")
+      printf "    • %s\n" "$item"
+    # Numbered list items
+    elif [[ "$line" =~ ^[0-9]+\.[[:space:]](.+)$ ]]; then
+      local item=$(_strip_md "${BASH_REMATCH[1]}")
+      printf "    %s\n" "$item"
+    # Commit lines (special case: backtick-wrapped hash)
+    elif [[ "$line" =~ ^\`([a-f0-9]+)\`[[:space:]](.+)$ ]]; then
+      printf "    ${C_WARN}%s${C_RESET}  %s\n" "${BASH_REMATCH[1]}" "${BASH_REMATCH[2]}"
+    # Horizontal rules
+    elif [[ "$line" == "---" ]]; then
+      continue
+    # Links (Full Changelog etc)
+    elif [[ "$line" =~ ^https:// ]]; then
+      printf "    ${C_DIM}%s${C_RESET}\n" "$line"
+    # Empty lines
+    elif [[ -z "$line" ]]; then
+      echo ""
+    # Everything else - strip markdown and print
     else
-      echo "$line"
+      local clean=$(_strip_md "$line")
+      [[ -n "$clean" ]] && printf "  %s\n" "$clean"
     fi
   done
 }
