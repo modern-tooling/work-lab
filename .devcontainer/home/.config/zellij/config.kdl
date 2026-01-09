@@ -1,0 +1,46 @@
+// work-lab zellij config
+// Optimized for AI coding agents (gastown, claude, etc.)
+
+// Theme
+theme "default"
+
+// Enable mouse support
+mouse_mode true
+
+// Scrollback buffer (large for reviewing agent output)
+scroll_buffer_size 50000
+
+// Copy to system clipboard
+copy_on_select true
+
+// Pane frames for visual clarity
+pane_frames true
+
+// Default layout
+default_layout "default"
+
+// Session behavior
+on_force_close "detach"
+
+// Simplified UI (less chrome)
+simplified_ui true
+
+// Default shell
+default_shell "bash"
+
+// Keybindings
+keybinds clear-defaults=false {
+    shared_except "locked" {
+        // Devcontainer attachment
+        // Ctrl+Shift+D opens a new pane attached to the project's devcontainer
+        // The [dc] prefix clearly indicates this pane is connected to the devcontainer
+        bind "Ctrl Shift d" {
+            NewPane {
+                command "dc-attach"
+                name "[dc] shell"
+            }
+        }
+    }
+}
+
+// Source user overrides if present (via ZELLIJ_CONFIG_DIR)

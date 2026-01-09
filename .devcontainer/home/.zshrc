@@ -1,5 +1,8 @@
 # work-lab zsh config
 
+# Add work-lab bin to PATH
+export PATH="$HOME/bin:$PATH"
+
 # Custom prompt: [work-lab] in cyan, path in gray, ❯ in accent blue
 PROMPT='%F{#50c8dc}[work-lab]%f %F{#8c969f}%~%f %F{#82b4d2}❯%f '
 

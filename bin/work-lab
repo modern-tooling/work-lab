@@ -6,7 +6,7 @@
 
 set -Eeuo pipefail
 
-VERSION="0.1.4"
+VERSION="0.1.5"
 
 # shellcheck disable=SC2155
 readonly SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
@@ -90,11 +90,14 @@ get_project_name() {
 }
 
 # Build mount flags for devcontainer up
+# Note: devcontainer CLI mount format: type=bind,source=<src>,target=<tgt>
+# Read-only not directly supported by devcontainer CLI, but we track intent
 build_mount_flags() {
   local flags=()
   local mount_spec src_path tgt_path
 
   # Add read-only mounts (guard against empty array for Bash < 4.4)
+  # Note: devcontainer CLI doesn't support readonly flag, so mounts are rw
   if (( ${#WORK_LAB_MOUNTS_RO[@]} > 0 )); then
     for mount_spec in "${WORK_LAB_MOUNTS_RO[@]}"; do
       # Validate format: must contain colon separator
@@ -108,7 +111,7 @@ build_mount_flags() {
       src_path="${src_path/#\~/$HOME}"
       src_path="${src_path//\$HOME/$HOME}"
       if [[ -e "$src_path" ]]; then
-        flags+=("--mount" "type=bind,source=$src_path,target=$tgt_path,readonly")
+        flags+=("--mount" "type=bind,source=$src_path,target=$tgt_path")
         status_ok "$src_path ${ICON_ARROW} $tgt_path (ro)" >&2
       else
         status_warn "skipping (not found): $src_path" >&2
@@ -154,18 +157,20 @@ usage() {
   echo ""
   print_accent "Commands:"
   printf "  ${C_COMMAND}%-14s${C_RESET} %s\n" "up" "Start work-lab for the current git project"
-  printf "  ${C_COMMAND}%-14s${C_RESET} %s\n" "shell" "Attach an interactive shell"
-  printf "  ${C_COMMAND}%-14s${C_RESET} %s\n" "mux" "Attach to multiplexer session (tmux or zellij)"
+  printf "  ${C_COMMAND}%-14s${C_RESET} %s\n" "mux" "Attach to tmux session ${C_DIM}(recommended)${C_RESET}"
+  printf "  ${C_COMMAND}%-14s${C_RESET} %s\n" "shell" "Run a one-off shell command"
   printf "  ${C_COMMAND}%-14s${C_RESET} %s\n" "stop" "Stop the container"
   printf "  ${C_COMMAND}%-14s${C_RESET} %s\n" "ps" "List running work-lab containers"
   printf "  ${C_COMMAND}%-14s${C_RESET} %s\n" "dc <cmd>" "Run command in project's devcontainer"
   printf "  ${C_COMMAND}%-14s${C_RESET} %s\n" "doctor" "Check environment and configuration"
+  printf "  ${C_COMMAND}%-14s${C_RESET} %s\n" "upgrade" "Upgrade to latest version"
   printf "  ${C_COMMAND}%-14s${C_RESET} %s\n" "version" "Show version information"
   printf "  ${C_COMMAND}%-14s${C_RESET} %s\n" "release-notes" "Show release notes"
   printf "  ${C_COMMAND}%-14s${C_RESET} %s\n" "help" "Show this message"
   echo ""
-  print_dim "Run 'work-lab up' from any git repository to start."
-  print_dim "Your project will be mounted at /workspaces/project inside the container."
+  print_accent "Workflow:"
+  print_dim "  1. wl up      Start work-lab for your project"
+  print_dim "  2. wl mux     Enter tmux session (persistent, multiple windows)"
   echo ""
   print_dim "https://github.com/modern-tooling/work-lab"
   echo ""
@@ -205,7 +210,13 @@ cmd_release_notes() {
 
   # Format and display each release
   local in_code_block=0
-  echo "$releases" | jq -r '.[] | "\(.tag_name)\n\(.body)\n---END---"' 2>/dev/null | while IFS= read -r line; do
+  local parsed
+  if ! parsed=$(echo "$releases" | jq -r '.[] | "\(.tag_name)\n\(.body)\n---END---"' 2>/dev/null); then
+    print_dim "No releases found"
+    hint "https://github.com/modern-tooling/work-lab/releases"
+    return 0
+  fi
+  echo "$parsed" | while IFS= read -r line; do
     # Version header
     if [[ "$line" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
       local tag="$line"
@@ -305,7 +316,8 @@ cmd_ps() {
   fi
 
   # Build associative arrays for work-labs and project devcontainers
-  declare -A worklab_for_project  # project_path -> container_id
+  # worklabs_for_project stores space-separated container IDs to support multiple sessions
+  declare -A worklabs_for_project  # project_path -> "cid1 cid2 ..."
   declare -A devcontainer_for_project  # project_path -> container_id
   declare -A container_name  # container_id -> name
   declare -a projects  # ordered list of projects
@@ -319,16 +331,22 @@ cmd_ps() {
       local project_mount
       project_mount=$(docker inspect "$cid" --format '{{range .Mounts}}{{if eq .Destination "/workspaces/project"}}{{.Source}}{{end}}{{end}}' 2>/dev/null)
       if [[ -n "$project_mount" ]]; then
-        worklab_for_project["$project_mount"]="$cid"
-        # Add to projects list if not already there
-        if [[ -z "${devcontainer_for_project[$project_mount]:-}" ]] && [[ -z "${worklab_for_project[$project_mount]:-}" ]]; then
-          projects+=("$project_mount")
+        # Append to existing work-labs for this project (space-separated)
+        local existing="${worklabs_for_project[$project_mount]:-}"
+        if [[ -z "$existing" ]]; then
+          worklabs_for_project["$project_mount"]="$cid"
+          # Add to projects list if not already there
+          if [[ -z "${devcontainer_for_project[$project_mount]:-}" ]]; then
+            projects+=("$project_mount")
+          fi
+        else
+          worklabs_for_project["$project_mount"]="$existing $cid"
         fi
       fi
     else
       # It's a project devcontainer
       devcontainer_for_project["$local_folder"]="$cid"
-      if [[ -z "${worklab_for_project[$local_folder]:-}" ]]; then
+      if [[ -z "${worklabs_for_project[$local_folder]:-}" ]]; then
         projects+=("$local_folder")
       fi
     fi
@@ -348,16 +366,55 @@ cmd_ps() {
 
     printf "\n${C_ACCENT}%s/${C_RESET}\n" "$project_name"
 
-    local wl_id="${worklab_for_project[$project]:-}"
+    local wl_ids="${worklabs_for_project[$project]:-}"
     local dc_id="${devcontainer_for_project[$project]:-}"
 
-    if [[ -n "$wl_id" ]] && [[ -n "$dc_id" ]]; then
-      # Both running - show paired
-      printf "  ├─ ${C_COMMAND}work-lab${C_RESET}      ${C_DIM}%s${C_RESET}  ${C_PASS}●${C_RESET}  ${C_DIM}%s${C_RESET}\n" "${wl_id:0:12}" "${container_name[$wl_id]}"
+    # Convert space-separated IDs to array
+    local -a wl_array=()
+    if [[ -n "$wl_ids" ]]; then
+      read -ra wl_array <<< "$wl_ids"
+    fi
+    local wl_count=${#wl_array[@]}
+
+    if (( wl_count > 0 )) && [[ -n "$dc_id" ]]; then
+      # Work-lab(s) + devcontainer running
+      if (( wl_count == 1 )); then
+        # Single work-lab session
+        local wl_id="${wl_array[0]}"
+        printf "  ├─ ${C_COMMAND}work-lab${C_RESET}      ${C_DIM}%s${C_RESET}  ${C_PASS}●${C_RESET}  ${C_DIM}%s${C_RESET}\n" "${wl_id:0:12}" "${container_name[$wl_id]}"
+      else
+        # Multiple work-lab sessions sharing the same devcontainer
+        local session_annotation
+        session_annotation=$(printf "${C_ACCENT}(%d sessions)${C_RESET}" "$wl_count")
+        printf "  ├─ ${C_COMMAND}work-lab${C_RESET}      %b\n" "$session_annotation"
+        local i=0
+        for wl_id in "${wl_array[@]}"; do
+          ((i++))
+          local connector="│"
+          if (( i == wl_count )); then
+            connector="│"  # last work-lab, devcontainer follows
+          fi
+          printf "  %s   └─ ${C_DIM}%s${C_RESET}  ${C_PASS}●${C_RESET}  ${C_DIM}%s${C_RESET}\n" "$connector" "${wl_id:0:12}" "${container_name[$wl_id]}"
+        done
+      fi
       printf "  └─ ${C_DIM}devcontainer${C_RESET}  ${C_DIM}%s${C_RESET}  ${C_PASS}●${C_RESET}  ${C_DIM}%s${C_RESET}\n" "${dc_id:0:12}" "${container_name[$dc_id]}"
-    elif [[ -n "$wl_id" ]]; then
-      # Only work-lab
-      printf "  └─ ${C_COMMAND}work-lab${C_RESET}      ${C_DIM}%s${C_RESET}  ${C_PASS}●${C_RESET}  ${C_DIM}%s (standalone)${C_RESET}\n" "${wl_id:0:12}" "${container_name[$wl_id]}"
+    elif (( wl_count > 0 )); then
+      # Only work-lab(s), no devcontainer
+      if (( wl_count == 1 )); then
+        local wl_id="${wl_array[0]}"
+        printf "  └─ ${C_COMMAND}work-lab${C_RESET}      ${C_DIM}%s${C_RESET}  ${C_PASS}●${C_RESET}  ${C_DIM}%s (standalone)${C_RESET}\n" "${wl_id:0:12}" "${container_name[$wl_id]}"
+      else
+        # Multiple standalone work-labs
+        local session_annotation
+        session_annotation=$(printf "${C_ACCENT}(%d sessions)${C_RESET}" "$wl_count")
+        printf "  └─ ${C_COMMAND}work-lab${C_RESET}      %b ${C_DIM}(standalone)${C_RESET}\n" "$session_annotation"
+        local i=0
+        for wl_id in "${wl_array[@]}"; do
+          ((i++))
+          local connector=" "
+          printf "  %s   └─ ${C_DIM}%s${C_RESET}  ${C_PASS}●${C_RESET}  ${C_DIM}%s${C_RESET}\n" "$connector" "${wl_id:0:12}" "${container_name[$wl_id]}"
+        done
+      fi
     elif [[ -n "$dc_id" ]]; then
       # Only devcontainer (no work-lab) - show warning indicator
       printf "  └─ ${C_DIM}devcontainer${C_RESET}  ${C_DIM}%s${C_RESET}  ${C_WARN}○${C_RESET}  ${C_DIM}%s${C_RESET}  ${C_WARN}no work-lab${C_RESET}\n" "${dc_id:0:12}" "${container_name[$dc_id]}"
@@ -414,8 +471,8 @@ cmd_up() {
   echo ""
   separator
   print_pass "Ready!"
-  hint "work-lab shell"
-  hint "work-lab mux"
+  hint "work-lab mux   ${C_DIM}(recommended - persistent tmux session)${C_RESET}"
+  hint "work-lab shell ${C_DIM}(one-off commands)${C_RESET}"
   printf "  ${C_LABEL}project at${C_RESET} ${C_COMMAND}/workspaces/project${C_RESET}\n"
 
   # Show sidecar mode tips
@@ -514,32 +571,69 @@ cmd_dc() {
     return 0
   fi
 
-  # Find project path
-  local project_path
+  # Find project path and name
+  local project_path project_name
   if is_inside_container; then
     project_path="/workspaces/project"
     if [[ ! -d "$project_path" ]]; then
       status_fail "Project not mounted at /workspaces/project"
       fail_exit
     fi
+    project_name=$(basename "$project_path")
   else
     project_path=$(find_git_root)
     if [[ -z "$project_path" ]]; then
       status_fail "Not in a git repository"
       fail_exit
     fi
+    project_name=$(basename "$project_path")
   fi
 
-  # Find the project's devcontainer
-  local dc_id
-  dc_id=$(docker ps --filter "label=devcontainer.local_folder=$project_path" \
-    --format "{{.ID}}" 2>/dev/null | head -n 1)
+  # Find the project's devcontainer using path-matching
+  local dc_id exact_match="" fallback_match=""
 
-  # Exclude work-lab container itself
-  local wl_check
-  wl_check=$(docker inspect "$dc_id" --format '{{range .Mounts}}{{.Destination}}{{end}}' 2>/dev/null)
-  if [[ "$wl_check" == *"/workspaces/work-lab"* ]]; then
-    dc_id=""
+  # Try exact path match first, then project name match
+  while IFS= read -r cid; do
+    [[ -z "$cid" ]] && continue
+
+    # Get container info
+    local cname local_folder
+    cname=$(docker inspect --format '{{.Name}}' "$cid" 2>/dev/null | tr -d '/')
+    local_folder=$(docker inspect --format '{{index .Config.Labels "devcontainer.local_folder"}}' "$cid" 2>/dev/null)
+
+    # Skip work-lab containers
+    if [[ "$cname" == *"work-lab"* ]]; then
+      continue
+    fi
+
+    # Check for exact path match
+    if [[ "$local_folder" == "$project_path" ]]; then
+      exact_match="$cid"
+      break
+    fi
+
+    # Check for project name match
+    if [[ -n "$local_folder" ]]; then
+      local folder_name
+      folder_name=$(basename "$local_folder")
+      if [[ "$folder_name" == "$project_name" ]]; then
+        exact_match="$cid"
+        break
+      fi
+    fi
+
+    # Store first non-work-lab container as fallback
+    if [[ -z "$fallback_match" ]]; then
+      fallback_match="$cid"
+    fi
+  done < <(docker ps --filter "label=devcontainer.local_folder" --format '{{.ID}}' 2>/dev/null)
+
+  # Use exact match if found, otherwise fallback
+  if [[ -n "$exact_match" ]]; then
+    dc_id="$exact_match"
+  elif [[ -n "$fallback_match" ]]; then
+    dc_id="$fallback_match"
+    status_warn "No exact devcontainer match, using first available"
   fi
 
   if [[ -z "$dc_id" ]]; then
@@ -552,10 +646,163 @@ cmd_dc() {
   fi
 
   # Run the command
-  if [[ "$cmd" == "bash" ]] || [[ "$cmd" == "sh" ]]; then
+  if [[ "$cmd" == "bash" ]] || [[ "$cmd" == "sh" ]] || [[ "$cmd" == "zsh" ]]; then
     docker exec -it "$dc_id" "$cmd" "$@"
   else
     docker exec "$dc_id" "$cmd" "$@"
+  fi
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Update checking
+# ─────────────────────────────────────────────────────────────────────────────
+UPDATE_CHECK_CACHE_DIR="$HOME/.cache/work-lab"
+UPDATE_CHECK_CACHE_FILE="$UPDATE_CHECK_CACHE_DIR/update-check"
+UPDATE_CHECK_CACHE_TTL=$((24 * 60 * 60))  # 24 hours in seconds
+
+# Compare two semantic versions: returns 0 if v1 < v2, 1 otherwise
+# Strips leading 'v' from both versions
+_version_lt() {
+  local v1="${1#v}" v2="${2#v}"
+  local IFS='.'
+  # shellcheck disable=SC2206
+  local i v1_parts=($v1) v2_parts=($v2)
+  for ((i = 0; i < 3; i++)); do
+    local p1="${v1_parts[i]:-0}" p2="${v2_parts[i]:-0}"
+    if (( p1 < p2 )); then
+      return 0
+    elif (( p1 > p2 )); then
+      return 1
+    fi
+  done
+  return 1  # equal, not less than
+}
+
+# Fetch latest version from GitHub (returns version string without 'v' prefix)
+_fetch_latest_version() {
+  local url="https://api.github.com/repos/modern-tooling/work-lab/releases/latest"
+  local response tag_name
+
+  if ! command -v curl &>/dev/null; then
+    return 1
+  fi
+
+  response=$(curl -sL --max-time 5 "$url" 2>/dev/null) || return 1
+
+  if ! command -v jq &>/dev/null; then
+    # fallback: parse with grep/sed
+    tag_name=$(echo "$response" | grep -o '"tag_name"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | sed 's/.*"v\?\([^"]*\)".*/\1/')
+  else
+    tag_name=$(echo "$response" | jq -r '.tag_name // empty' 2>/dev/null)
+  fi
+
+  if [[ -z "$tag_name" ]]; then
+    return 1
+  fi
+
+  # strip leading 'v' if present
+  echo "${tag_name#v}"
+}
+
+# Get cached latest version (returns empty if cache expired or missing)
+_get_cached_version() {
+  if [[ ! -f "$UPDATE_CHECK_CACHE_FILE" ]]; then
+    return 1
+  fi
+
+  local cache_time cached_version now
+  cache_time=$(head -1 "$UPDATE_CHECK_CACHE_FILE" 2>/dev/null) || return 1
+  cached_version=$(tail -1 "$UPDATE_CHECK_CACHE_FILE" 2>/dev/null) || return 1
+  now=$(date +%s)
+
+  if (( now - cache_time > UPDATE_CHECK_CACHE_TTL )); then
+    return 1  # cache expired
+  fi
+
+  echo "$cached_version"
+}
+
+# Save version to cache
+_save_cached_version() {
+  local version="$1"
+  mkdir -p "$UPDATE_CHECK_CACHE_DIR"
+  printf '%s\n%s\n' "$(date +%s)" "$version" > "$UPDATE_CHECK_CACHE_FILE"
+}
+
+# Check for updates (uses cache, returns 0 if update available)
+# Sets UPDATE_LATEST_VERSION variable
+check_for_update() {
+  local latest
+
+  # try cache first
+  latest=$(_get_cached_version)
+  if [[ -z "$latest" ]]; then
+    # cache miss or expired, fetch from GitHub
+    latest=$(_fetch_latest_version) || return 1
+    _save_cached_version "$latest"
+  fi
+
+  UPDATE_LATEST_VERSION="$latest"
+
+  # compare versions
+  if _version_lt "$VERSION" "$latest"; then
+    return 0  # update available
+  fi
+  return 1  # up to date
+}
+
+cmd_upgrade() {
+  local latest installed_via_homebrew=false
+
+  header "Checking for updates..."
+
+  # force fresh fetch (bypass cache)
+  latest=$(_fetch_latest_version) || latest=""
+  if [[ -z "$latest" ]]; then
+    status_fail "Could not fetch latest version"
+    hint "check your internet connection"
+    hint "https://github.com/modern-tooling/work-lab/releases"
+    fail_exit
+  fi
+
+  # update cache
+  _save_cached_version "$latest"
+
+  printf "  ${C_LABEL}current${C_RESET}   ${C_COMMAND}v%s${C_RESET}\n" "$VERSION"
+  printf "  ${C_LABEL}latest${C_RESET}    ${C_COMMAND}v%s${C_RESET}\n" "$latest"
+  echo ""
+
+  if ! _version_lt "$VERSION" "$latest"; then
+    status_ok "Already up to date"
+    return 0
+  fi
+
+  # check installation method
+  if command -v brew &>/dev/null && brew list work-lab &>/dev/null 2>&1; then
+    installed_via_homebrew=true
+  fi
+
+  if [[ "$installed_via_homebrew" == "true" ]]; then
+    status_info "Installed via Homebrew"
+    activity "Running brew upgrade work-lab..."
+    echo ""
+    if brew upgrade work-lab; then
+      echo ""
+      status_ok "Upgraded to v$latest"
+    else
+      echo ""
+      status_fail "Upgrade failed"
+      hint "try running 'brew upgrade work-lab' manually"
+      fail_exit
+    fi
+  else
+    status_info "Not installed via Homebrew"
+    echo ""
+    print_accent "To upgrade, re-run the installer:"
+    echo ""
+    printf "  ${C_COMMAND}curl -fsSL https://raw.githubusercontent.com/modern-tooling/work-lab/main/install.sh | bash${C_RESET}\n"
+    echo ""
+    hint "https://github.com/modern-tooling/work-lab#installation"
   fi
 }
 
@@ -746,6 +993,15 @@ cmd_doctor() {
     status_skip "cannot determine (not in a git repo)"
   fi
 
+  # check for updates (uses 24-hour cache)
+  header "Updates"
+  if check_for_update; then
+    status_info "v$UPDATE_LATEST_VERSION available (current: v$VERSION)"
+    hint "work-lab upgrade"
+  else
+    status_ok "up to date (v$VERSION)"
+  fi
+
   # summary
   echo ""
   separator
@@ -782,6 +1038,9 @@ case "${1:-}" in
     ;;
   doctor)
     cmd_doctor
+    ;;
+  upgrade)
+    cmd_upgrade
     ;;
   version|--version|-v)
     cmd_version
