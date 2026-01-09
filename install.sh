@@ -8,7 +8,7 @@
 
 set -e
 
-INSTALL_DIR="${WORK_LAB_HOME:-$HOME/.work-lab}"
+INSTALL_DIR="${WORK_LAB_HOME:-${XDG_DATA_HOME:-$HOME/.local/share}/work-lab}"
 CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/work-lab"
 REPO_URL="https://github.com/modern-tooling/work-lab.git"
 GHCR_IMAGE="ghcr.io/modern-tooling/work-lab:latest"
