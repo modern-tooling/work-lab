@@ -44,7 +44,7 @@ Choose your preferred method:
 curl -fsSL https://raw.githubusercontent.com/modern-tooling/work-lab/main/install.sh | bash
 ```
 
-This clones to `~/.work-lab`, creates config directory, and pulls the pre-built image.
+This clones to `~/.local/share/work-lab` (XDG compliant), creates config directory, and pulls the pre-built image.
 
 ### Homebrew
 
@@ -60,8 +60,8 @@ Click **"Use this template"** at the top of this repo to create your own customi
 ### Manual
 
 ```bash
-git clone https://github.com/modern-tooling/work-lab.git ~/.work-lab
-export PATH="$PATH:$HOME/.work-lab/bin"
+git clone https://github.com/modern-tooling/work-lab.git ~/.local/share/work-lab
+export PATH="$PATH:$HOME/.local/share/work-lab/bin"
 ```
 
 ---
