@@ -42,8 +42,9 @@ It provides a consistent safe environment for engaging with your tools and AI co
 | [Docker](https://docs.docker.com/get-docker/) | Container runtime | `brew install --cask docker` (or alternatives) |
 | [devcontainer CLI](https://github.com/devcontainers/cli) | Start containers from CLI | `npm install -g @devcontainers/cli` |
 
-Optional but recommended:
+Optional:
 - [Homebrew](https://brew.sh/) — For easy installation on macOS/Linux
+- [Zellij](https://github.com/zellij-org/zellij) — Modern tmux alternative
 
 ---
 
@@ -82,17 +83,17 @@ export PATH="$PATH:$HOME/.local/share/work-lab/bin"
 ## Quick start
 
 ```bash
-cd /path/to/your/project    # Any git repository
+cd /path/to/your/project     # Any git repository
 work-lab doctor              # Check your environment
 work-lab up                  # Start the container
-work-lab tmux                # Attach to tmux session
+work-lab mux                 # Attach to tmux session (or zellij if configured)
 ```
 
 Inside the container:
 
 ```bash
 cd /workspaces/project       # Your project is mounted here
-claude                        # or gastown, opencode, aider, etc.
+claude                       # or gastown, opencode, aider, etc.
 ```
 
 ### Helper commands
@@ -100,7 +101,7 @@ claude                        # or gastown, opencode, aider, etc.
 ```bash
 work-lab up       # Start the devcontainer
 work-lab shell    # Attach an interactive shell
-work-lab tmux     # Attach to tmux session (creates 'lab' if missing)
+work-lab mux      # Attach to multiplexer (tmux default, or zellij)
 work-lab stop     # Stop the container
 work-lab ps       # List running work-lab containers
 work-lab doctor   # Check environment and configuration
@@ -117,7 +118,7 @@ Then use:
 
 ```bash
 wl up      # Same as: work-lab up
-wl tmux    # Same as: work-lab tmux
+wl mux     # Same as: work-lab mux
 ```
 
 ---
@@ -198,7 +199,7 @@ You can always update your `~/.config/work-lab/post-create.sh` to install additi
 ### Example: Running Gastown
 
 ```bash
-work-lab tmux                # Attach to work-lab
+work-lab mux                 # Attach to work-lab
 cd /workspaces/project       # Your project is already here
 gastown                      # Start Gastown orchestrator
 ```

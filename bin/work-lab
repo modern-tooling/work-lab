@@ -6,7 +6,7 @@
 
 set -Eeuo pipefail
 
-VERSION="0.1.1"
+VERSION="0.1.2"
 
 # shellcheck disable=SC2155
 readonly SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
@@ -25,6 +25,7 @@ source "$REPO_DIR/lib/style.sh"
 # ─────────────────────────────────────────────────────────────────────────────
 # Defaults (can be overridden by ~/.config/work-lab/config or environment)
 : "${WORK_LAB_IMAGE:=ghcr.io/modern-tooling/work-lab:latest}"
+: "${WORK_LAB_MUX:=tmux}"  # terminal multiplexer: tmux or zellij
 
 # Additional mounts (arrays, set in config file)
 # Format: "source:target" - will be mounted read-only or read-write
@@ -124,7 +125,7 @@ usage() {
   print_accent "Commands:"
   printf "  ${C_COMMAND}%-10s${C_RESET} %s\n" "up" "Start work-lab for the current git project"
   printf "  ${C_COMMAND}%-10s${C_RESET} %s\n" "shell" "Attach an interactive shell"
-  printf "  ${C_COMMAND}%-10s${C_RESET} %s\n" "tmux" "Attach to tmux session (creates 'lab' if missing)"
+  printf "  ${C_COMMAND}%-10s${C_RESET} %s\n" "mux" "Attach to multiplexer session (tmux or zellij)"
   printf "  ${C_COMMAND}%-10s${C_RESET} %s\n" "stop" "Stop the container"
   printf "  ${C_COMMAND}%-10s${C_RESET} %s\n" "ps" "List running work-lab containers"
   printf "  ${C_COMMAND}%-10s${C_RESET} %s\n" "doctor" "Check environment and configuration"
@@ -220,7 +221,7 @@ cmd_shell() {
   docker exec -it -u vscode -w /workspaces/project "$container_id" bash
 }
 
-cmd_tmux() {
+cmd_mux() {
   local container_id
   container_id=$(find_container)
   if [[ -z "$container_id" ]]; then
@@ -228,9 +229,32 @@ cmd_tmux() {
     hint "work-lab up"
     exit 1
   fi
+
+  # Check if configured mux is available in container
+  if ! docker exec "$container_id" command -v "$WORK_LAB_MUX" &>/dev/null; then
+    status_fail "$WORK_LAB_MUX not found in container"
+    if [[ "$WORK_LAB_MUX" == "zellij" ]]; then
+      hint "install zellij via ~/.config/work-lab/post-create.sh"
+    fi
+    exit 1
+  fi
+
   # Attach to existing session or create a new one named 'lab'
-  docker exec -it -u vscode -w /workspaces/project "$container_id" \
-    bash -c 'tmux attach -t lab 2>/dev/null || tmux new -s lab'
+  case "$WORK_LAB_MUX" in
+    tmux)
+      docker exec -it -u vscode -w /workspaces/project "$container_id" \
+        bash -c 'tmux attach -t lab 2>/dev/null || tmux new -s lab'
+      ;;
+    zellij)
+      docker exec -it -u vscode -w /workspaces/project "$container_id" \
+        zellij attach --create lab
+      ;;
+    *)
+      status_fail "Unknown multiplexer: $WORK_LAB_MUX"
+      hint "set WORK_LAB_MUX to 'tmux' or 'zellij'"
+      exit 1
+      ;;
+  esac
 }
 
 cmd_stop() {
@@ -437,8 +461,8 @@ case "${1:-}" in
   shell)
     cmd_shell
     ;;
-  tmux)
-    cmd_tmux
+  mux|tmux)
+    cmd_mux
     ;;
   stop)
     cmd_stop

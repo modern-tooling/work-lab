@@ -20,6 +20,15 @@
 # export WORK_LAB_IMAGE="my-registry/my-image:v1.2.3"
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Terminal multiplexer
+# ─────────────────────────────────────────────────────────────────────────────
+# Choose between tmux (default, pre-installed) or zellij.
+# If using zellij, install it via post-create.sh first.
+# Default: tmux
+#
+# export WORK_LAB_MUX="zellij"
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Additional mounts
 # ─────────────────────────────────────────────────────────────────────────────
 # Mount additional files/directories into the container.
