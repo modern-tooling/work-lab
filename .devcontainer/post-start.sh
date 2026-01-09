@@ -3,7 +3,7 @@
 # Copyright (c) 2026 Ryan Snodgrass. MIT License.
 # Runs every time the devcontainer starts.
 
-set -e
+set -Eeuo pipefail
 
 echo ""
 echo "=========================================="
@@ -13,7 +13,7 @@ echo ""
 
 echo "Mounted directories:"
 echo "  /workspaces/work-lab   <- this repo"
-if [ -d "/workspaces/projects" ]; then
+if [[ -d "/workspaces/projects" ]]; then
   echo "  /workspaces/projects   <- your projects"
 else
   echo "  /workspaces/projects   <- (not mounted, see README)"
@@ -21,10 +21,11 @@ fi
 echo ""
 
 # Source user's post-start customizations if present
-USER_POST_START="$HOME/.config/work-lab/post-start.sh"
-if [ -f "$USER_POST_START" ]; then
-  echo "Sourcing $USER_POST_START..."
-  source "$USER_POST_START"
+user_post_start="$HOME/.config/work-lab/post-start.sh"
+if [[ -f "$user_post_start" ]]; then
+  echo "Sourcing $user_post_start..."
+  # shellcheck source=/dev/null
+  source "$user_post_start"
   echo ""
 fi
 

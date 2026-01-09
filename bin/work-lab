@@ -4,13 +4,17 @@
 # A small convenience script for managing the work-lab devcontainer.
 # This script is OPTIONAL. You can use the devcontainer CLI or VS Code directly.
 
-set -e
+set -Eeuo pipefail
 
 VERSION="0.1.0"
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-REPO_DIR="$(dirname "$SCRIPT_DIR")"
-CONTAINER_NAME="work-lab"
+# shellcheck disable=SC2155
+readonly SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
+# shellcheck disable=SC2155
+readonly REPO_DIR="$(dirname -- "$SCRIPT_DIR")"
+
+# error handler for debugging
+trap 'printf "Error at line %d: exit %d\n" "$LINENO" "$?" >&2' ERR
 
 usage() {
   cat << EOF
@@ -37,7 +41,7 @@ cmd_version() {
 
 # Find the running container ID
 find_container() {
-  docker ps -q --filter "label=devcontainer.local_folder=$REPO_DIR" 2>/dev/null | head -1
+  docker ps -q --filter "label=devcontainer.local_folder=$REPO_DIR" 2>/dev/null | head -n 1
 }
 
 cmd_up() {
@@ -53,37 +57,42 @@ cmd_up() {
 }
 
 cmd_shell() {
-  CONTAINER_ID=$(find_container)
-  if [ -z "$CONTAINER_ID" ]; then
-    echo "Container not running. Start it with: work-lab up"
+  local container_id
+  container_id=$(find_container)
+  if [[ -z "$container_id" ]]; then
+    echo "Container not running. Start it with: work-lab up" >&2
     exit 1
   fi
-  docker exec -it -u vscode -w /workspaces/work-lab "$CONTAINER_ID" bash
+  docker exec -it -u vscode -w /workspaces/work-lab "$container_id" bash
 }
 
 cmd_tmux() {
-  CONTAINER_ID=$(find_container)
-  if [ -z "$CONTAINER_ID" ]; then
-    echo "Container not running. Start it with: work-lab up"
+  local container_id
+  container_id=$(find_container)
+  if [[ -z "$container_id" ]]; then
+    echo "Container not running. Start it with: work-lab up" >&2
     exit 1
   fi
   # Attach to existing session or create a new one named 'lab'
-  docker exec -it -u vscode -w /workspaces/work-lab "$CONTAINER_ID" \
+  docker exec -it -u vscode -w /workspaces/work-lab "$container_id" \
     bash -c 'tmux attach -t lab 2>/dev/null || tmux new -s lab'
 }
 
 cmd_stop() {
-  CONTAINER_ID=$(find_container)
-  if [ -z "$CONTAINER_ID" ]; then
+  local container_id
+  container_id=$(find_container)
+  if [[ -z "$container_id" ]]; then
     echo "Container not running."
     exit 0
   fi
   echo "Stopping container..."
-  docker stop "$CONTAINER_ID"
+  docker stop "$container_id"
   echo "Stopped."
 }
 
 cmd_doctor() {
+  local container_id config_dir projects_dir project_count
+
   echo ""
   echo "work-lab doctor"
   echo "==============="
@@ -91,7 +100,7 @@ cmd_doctor() {
 
   # check work-lab repo
   echo "work-lab repo:"
-  if [ -d "$REPO_DIR/.devcontainer" ]; then
+  if [[ -d "$REPO_DIR/.devcontainer" ]]; then
     echo "  [ok] $REPO_DIR"
   else
     echo "  [error] not found at $REPO_DIR"
@@ -100,12 +109,12 @@ cmd_doctor() {
 
   # check dependencies
   echo "Dependencies:"
-  if command -v docker &> /dev/null; then
-    echo "  [ok] docker: $(docker --version | head -1)"
+  if command -v docker &>/dev/null; then
+    echo "  [ok] docker: $(docker --version | head -n 1)"
   else
     echo "  [error] docker: not found"
   fi
-  if command -v devcontainer &> /dev/null; then
+  if command -v devcontainer &>/dev/null; then
     echo "  [ok] devcontainer CLI: $(devcontainer --version 2>/dev/null || echo 'installed')"
   else
     echo "  [warn] devcontainer CLI: not found (install with: npm install -g @devcontainers/cli)"
@@ -114,9 +123,9 @@ cmd_doctor() {
 
   # check container status
   echo "Container:"
-  CONTAINER_ID=$(find_container)
-  if [ -n "$CONTAINER_ID" ]; then
-    echo "  [ok] running (id: ${CONTAINER_ID:0:12})"
+  container_id=$(find_container)
+  if [[ -n "$container_id" ]]; then
+    echo "  [ok] running (id: ${container_id:0:12})"
   else
     echo "  [info] not running"
   fi
@@ -124,15 +133,15 @@ cmd_doctor() {
 
   # check user config
   echo "User config (~/.config/work-lab/):"
-  CONFIG_DIR="$HOME/.config/work-lab"
-  if [ -d "$CONFIG_DIR" ]; then
+  config_dir="$HOME/.config/work-lab"
+  if [[ -d "$config_dir" ]]; then
     echo "  [ok] directory exists"
-    if [ -f "$CONFIG_DIR/post-create.sh" ]; then
+    if [[ -f "$config_dir/post-create.sh" ]]; then
       echo "  [ok] post-create.sh found"
     else
       echo "  [info] post-create.sh not found (optional)"
     fi
-    if [ -f "$CONFIG_DIR/post-start.sh" ]; then
+    if [[ -f "$config_dir/post-start.sh" ]]; then
       echo "  [ok] post-start.sh found"
     else
       echo "  [info] post-start.sh not found (optional)"
@@ -145,20 +154,20 @@ cmd_doctor() {
 
   # check projects mount source
   echo "Projects directory:"
-  PROJECTS_DIR="$HOME/projects"
-  if [ -d "$PROJECTS_DIR" ]; then
-    PROJECT_COUNT=$(find "$PROJECTS_DIR" -maxdepth 1 -type d | wc -l | tr -d ' ')
-    echo "  [ok] $PROJECTS_DIR ($((PROJECT_COUNT - 1)) items)"
+  projects_dir="$HOME/projects"
+  if [[ -d "$projects_dir" ]]; then
+    project_count=$(find "$projects_dir" -maxdepth 1 -type d 2>/dev/null | wc -l | tr -d ' ')
+    echo "  [ok] $projects_dir ($((project_count - 1)) items)"
   else
-    echo "  [warn] $PROJECTS_DIR not found"
+    echo "  [warn] $projects_dir not found"
     echo "         create it or edit devcontainer.json to change mount source"
   fi
   echo ""
 
   # check if current directory has a devcontainer
   echo "Current directory ($PWD):"
-  if [ -d ".devcontainer" ] || [ -f ".devcontainer.json" ]; then
-    if [ "$PWD" = "$REPO_DIR" ]; then
+  if [[ -d ".devcontainer" ]] || [[ -f ".devcontainer.json" ]]; then
+    if [[ "$PWD" == "$REPO_DIR" ]]; then
       echo "  [info] this is the work-lab repo"
     else
       echo "  [info] has devcontainer -> Sidecar mode"

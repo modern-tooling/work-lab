@@ -4,6 +4,8 @@
 # Copy to ~/.config/work-lab/post-create.sh
 # Runs once after the devcontainer is created.
 
+set -Eeuo pipefail
+
 # Install additional coding agents
 # npm install -g opencode
 # npm install -g aider

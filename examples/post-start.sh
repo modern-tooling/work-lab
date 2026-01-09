@@ -4,6 +4,8 @@
 # Copy to ~/.config/work-lab/post-start.sh
 # Runs every time the devcontainer starts.
 
+set -Eeuo pipefail
+
 # Refresh credentials
 # aws sso login --profile my-profile
 
