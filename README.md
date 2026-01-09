@@ -146,7 +146,9 @@ flowchart TB
 
 ### Sidecar mode (Work with existing Devcontainer)
 
-Two containers, both mounting the same project from your host filesystem.
+It is very common practice now for projects to use Devcontainers to ensure a consistent test environment during
+development. This supports both a Devcontainer and the 'work-lab' container simultaneously mounting the same
+project from your host filesystem.
 
 ```mermaid
 flowchart TB
@@ -264,8 +266,8 @@ flowchart LR
     HostProject["your-project/"]
     Agent --> Project
     Project -.->|bind mount| HostProject
-    style Host fill:#fee2e2,stroke:#dc2626
-    style Container fill:#dcfce7,stroke:#16a34a
+    style Host fill:#e8d4d4,stroke:#996666,color:#663333
+    style Container fill:#d4e8d4,stroke:#669966,color:#336633
     style Agent fill:#4a9eff,stroke:#2d7ad9
 ```
 
