@@ -23,16 +23,15 @@ A container-based lab for humans and AI coding agents to think, plan, code, and 
 
 - Thinking and planning
 - Running coding agent tooling ([Claude](https://github.com/anthropics/claude-code), [Gastown](https://github.com/steveyegge/gastown), [SageOx](https://github.com/sageox/))
-- Operating with `tmux`
-- Experimenting safely
+- Experimenting safely (e.g. `claude --dangerously-skip-permissions`)
 
-It provides a consistent shell with your tools, independent of whatever project you're working on.
+It provides a consistent safe environment for engaging with your tools and AI coding agents, independent of whatever project you're working on.
 
 ## What this is NOT
 
 - **Not a project template.** This repo never modifies the projects you work on.
 - **Not a replacement for project devcontainers.** If a project has its own devcontainer, that's where builds and services run.
-- **Not infrastructure.** No databases, no services, no orchestration.
+- **Not infrastructure.** No databases, no services, no application orchestration.
 
 ---
 
@@ -40,7 +39,7 @@ It provides a consistent shell with your tools, independent of whatever project 
 
 | Requirement | Purpose | Install |
 |-------------|---------|---------|
-| [Docker](https://docs.docker.com/get-docker/) | Container runtime | `brew install --cask docker` |
+| [Docker](https://docs.docker.com/get-docker/) | Container runtime | `brew install --cask docker` (or alternatives) |
 | [devcontainer CLI](https://github.com/devcontainers/cli) | Start containers from CLI | `npm install -g @devcontainers/cli` |
 
 Optional but recommended:
@@ -52,7 +51,7 @@ Optional but recommended:
 
 Choose your preferred method:
 
-### Homebrew (recommended)
+### Homebrew (recommended on MacOS)
 
 ```bash
 brew tap modern-tooling/tap
@@ -253,13 +252,12 @@ Running `claude --dangerously-skip-permissions` on your **host machine** gives t
 Running the same command **inside work-lab** limits the blast radius to only what's mounted:
 
 ```mermaid
-flowchart TB
-    subgraph Host["Host Machine (protected)"]
+flowchart LR
+    subgraph Host["Host (protected)"]
         SSH["~/.ssh"]
         AWS["~/.aws"]
-        Docs["~/Documents"]
     end
-    subgraph Container["work-lab container"]
+    subgraph Container["work-lab"]
         Agent["claude --dangerously-skip-permissions"]
         Project["/workspaces/project"]
     end
@@ -268,18 +266,20 @@ flowchart TB
     Project -.->|bind mount| HostProject
     style Host fill:#fee2e2,stroke:#dc2626
     style Container fill:#dcfce7,stroke:#16a34a
-    style Agent fill:#4a9eff,stroke:#2d7ad9,color:#fff
+    style Agent fill:#4a9eff,stroke:#2d7ad9
 ```
 
 | Resource | On host | In work-lab |
 |----------|---------|-------------|
 | SSH keys (`~/.ssh`) | Accessible | Not mounted |
-| Cloud credentials | Accessible | Not mounted |
+| Cloud credentials (`~/.aws`) | Accessible | Not mounted |
 | Browser data | Accessible | Not mounted |
 | System files | Accessible | Container's own |
-| Your projects | Accessible | Only `/workspaces/project` |
+| Your project | Accessible | `/workspaces/project` |
+| Claude config (`~/.claude`) | Accessible | Mounted read-only (default) |
+| XDG configs (`~/.config/*`) | Accessible | User-controlled (RO or RW) |
 
-**Result:** Agent autonomy (no permission prompts) with bounded risk (can only touch mounted project files).
+**Result:** Agent autonomy (no permission prompts) with bounded risk. Users can mount additional configs via `~/.config/work-lab/config`.
 
 ### Supply chain considerations
 
