@@ -34,26 +34,54 @@ It provides a consistent shell with your tools, independent of whatever project 
 
 ---
 
+## Installation
+
+Choose your preferred method:
+
+### One-liner (recommended)
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/modern-tooling/work-lab/main/install.sh | bash
+```
+
+This clones to `~/.work-lab`, creates config directory, and pulls the pre-built image.
+
+### Homebrew
+
+```bash
+brew tap modern-tooling/tap
+brew install work-lab
+```
+
+### GitHub Template
+
+Click **"Use this template"** at the top of this repo to create your own customized version.
+
+### Manual
+
+```bash
+git clone https://github.com/modern-tooling/work-lab.git ~/.work-lab
+export PATH="$PATH:$HOME/.work-lab/bin"
+```
+
+---
+
 ## Quick start
 
 ```bash
-# 1. Clone and open
-git clone <this-repo>
-cd work-lab
+work-lab doctor  # Check your environment
+work-lab up      # Start the container
+work-lab tmux    # Attach to tmux session
+```
 
-# 2. Start the container
-devcontainer up --workspace-folder .
-# Or open in any devcontainer-compatible IDE and "Reopen in Container"
+Inside the container:
 
-# 3. Start working
-tmux new -s lab
+```bash
 cd /workspaces/projects/your-project
 claude    # or opencode, aider, etc.
 ```
 
-### Using Helper script
-
-A convenience script is provided at `bin/work-lab`:
+### Helper commands
 
 ```bash
 work-lab up      # Start the devcontainer
@@ -62,8 +90,6 @@ work-lab tmux    # Attach to tmux session (creates 'lab' if missing)
 work-lab stop    # Stop the container
 work-lab doctor  # Check environment and configuration
 ```
-
-To use: `export PATH="$PATH:/path/to/work-lab/bin"`
 
 ---
 
