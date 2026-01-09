@@ -3,14 +3,26 @@
   "build": {
     "dockerfile": "Dockerfile"
   },
+  "features": {
+    "ghcr.io/devcontainers/features/common-utils:2": {
+      "installZsh": true,
+      "installOhMyZsh": false,
+      "configureZshAsDefaultShell": false,
+      "username": "worklab"
+    },
+    "ghcr.io/devcontainers/features/github-cli:1": {}
+  },
   "workspaceFolder": "/workspaces/work-lab",
   "workspaceMount": "source=${localWorkspaceFolder},target=/workspaces/work-lab,type=bind,consistency=cached",
   "mounts": [
     // User's XDG config for work-lab customizations (optional)
-    "source=${localEnv:HOME}/.config/work-lab,target=/home/vscode/.config/work-lab,type=bind,consistency=cached"
+    "source=${localEnv:HOME}/.config/work-lab,target=/home/worklab/.config/work-lab,type=bind,consistency=cached"
     // Note: Project mount is added dynamically by 'work-lab up' based on current git repo
   ],
-  "remoteUser": "vscode",
+  "remoteUser": "worklab",
+  "remoteEnv": {
+    "HOST_SHELL": "${localEnv:SHELL}"
+  },
   "postCreateCommand": "bash .devcontainer/post-create.sh",
   "postStartCommand": "bash .devcontainer/post-start.sh",
   "customizations": {
