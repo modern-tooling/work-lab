@@ -37,6 +37,8 @@ It provides a consistent safe environment for engaging with your tools and AI co
 
 ## Prerequisites
 
+**Platform:** Linux and macOS only. Windows is not currently supported (contributions welcome).
+
 | Requirement | Purpose | Install |
 |-------------|---------|---------|
 | [Docker](https://docs.docker.com/get-docker/) | Container runtime | `brew install --cask docker` (or alternatives) |
