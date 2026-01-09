@@ -73,19 +73,34 @@ fi
 local_bin="$HOME/.local/bin"
 mkdir -p "$local_bin"
 
-# Main symlink: work-lab
-if [[ -L "$local_bin/work-lab" ]] || [[ -e "$local_bin/work-lab" ]]; then
+# Main symlink: work-lab (safe to overwrite - it's our own command)
+if [[ -L "$local_bin/work-lab" ]]; then
   rm -f -- "$local_bin/work-lab"
+elif [[ -e "$local_bin/work-lab" ]]; then
+  error "$local_bin/work-lab exists and is not a symlink. Please remove it manually."
 fi
 ln -s "$INSTALL_DIR/bin/work-lab" "$local_bin/work-lab"
 success "Symlinked to $local_bin/work-lab"
 
-# Short alias: wl
-if [[ -L "$local_bin/wl" ]] || [[ -e "$local_bin/wl" ]]; then
-  rm -f -- "$local_bin/wl"
+# Short alias: wl (only if not taken by another tool)
+if [[ -L "$local_bin/wl" ]]; then
+  # Check if it already points to work-lab
+  existing_target=$(readlink "$local_bin/wl")
+  if [[ "$existing_target" == *"work-lab"* ]]; then
+    rm -f -- "$local_bin/wl"
+    ln -s "$INSTALL_DIR/bin/work-lab" "$local_bin/wl"
+    success "Updated symlink $local_bin/wl"
+  else
+    info "Skipping 'wl' alias: $local_bin/wl already exists (points to $existing_target)"
+    info "To use 'wl' for work-lab, add to your shell profile: alias wl='work-lab'"
+  fi
+elif [[ -e "$local_bin/wl" ]]; then
+  info "Skipping 'wl' alias: $local_bin/wl already exists (not a symlink)"
+  info "To use 'wl' for work-lab, add to your shell profile: alias wl='work-lab'"
+else
+  ln -s "$INSTALL_DIR/bin/work-lab" "$local_bin/wl"
+  success "Symlinked to $local_bin/wl (short alias)"
 fi
-ln -s "$INSTALL_DIR/bin/work-lab" "$local_bin/wl"
-success "Symlinked to $local_bin/wl (short alias)"
 
 # Check if ~/.local/bin is in PATH
 if [[ ":$PATH:" != *":$local_bin:"* ]]; then
