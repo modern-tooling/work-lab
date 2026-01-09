@@ -6,15 +6,27 @@
 
 set -Eeuo pipefail
 
-VERSION="0.1.3"
+VERSION="0.1.4"
 
 # shellcheck disable=SC2155
 readonly SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
 # shellcheck disable=SC2155
 readonly REPO_DIR="$(dirname -- "$SCRIPT_DIR")"
 
-# error handler for debugging
-trap 'printf "Error at line %d: exit %d\n" "$LINENO" "$?" >&2' ERR
+# error handler for debugging (only fires on unexpected errors)
+_err_handler() {
+  local code=$?
+  # Skip if this is an intentional exit (INTENTIONAL_EXIT is set)
+  [[ "${INTENTIONAL_EXIT:-0}" -eq 1 ]] && return 0
+  printf "Error at line %d: exit %d\n" "$1" "$code" >&2
+}
+trap '_err_handler "$LINENO"' ERR
+
+# Helper for intentional non-zero exits (avoids triggering error trap)
+fail_exit() {
+  INTENTIONAL_EXIT=1
+  exit "${1:-1}"
+}
 
 # Source the styling library
 # shellcheck source=../lib/style.sh
@@ -31,7 +43,7 @@ source "$REPO_DIR/lib/style.sh"
 # Format: "source:target" - will be mounted read-only or read-write
 WORK_LAB_MOUNTS_RO=(
   # Claude config (settings, API keys) - read-only for safety
-  "$HOME/.claude:/home/vscode/.claude"
+  "$HOME/.claude:/home/worklab/.claude"
 )
 WORK_LAB_MOUNTS_RW=()    # read-write mounts
 
@@ -69,7 +81,7 @@ build_mount_flags() {
     for mount_spec in "${WORK_LAB_MOUNTS_RO[@]}"; do
       # Validate format: must contain colon separator
       if [[ "$mount_spec" != *:* ]]; then
-        echo "  [error] invalid mount spec (missing colon): $mount_spec" >&2
+        status_fail "invalid mount spec (missing colon): $mount_spec" >&2
         continue
       fi
       src_path="${mount_spec%%:*}"
@@ -79,9 +91,9 @@ build_mount_flags() {
       src_path="${src_path//\$HOME/$HOME}"
       if [[ -e "$src_path" ]]; then
         flags+=("--mount" "type=bind,source=$src_path,target=$tgt_path,readonly")
-        echo "  [ok] $src_path -> $tgt_path (ro)"
+        status_ok "$src_path ${ICON_ARROW} $tgt_path (ro)" >&2
       else
-        echo "  [warn] skipping (source not found): $src_path" >&2
+        status_warn "skipping (not found): $src_path" >&2
       fi
     done
   fi
@@ -91,7 +103,7 @@ build_mount_flags() {
     for mount_spec in "${WORK_LAB_MOUNTS_RW[@]}"; do
       # Validate format: must contain colon separator
       if [[ "$mount_spec" != *:* ]]; then
-        echo "  [error] invalid mount spec (missing colon): $mount_spec" >&2
+        status_fail "invalid mount spec (missing colon): $mount_spec" >&2
         continue
       fi
       src_path="${mount_spec%%:*}"
@@ -101,9 +113,9 @@ build_mount_flags() {
       src_path="${src_path//\$HOME/$HOME}"
       if [[ -e "$src_path" ]]; then
         flags+=("--mount" "type=bind,source=$src_path,target=$tgt_path")
-        echo "  [ok] $src_path -> $tgt_path (rw)"
+        status_ok "$src_path ${ICON_ARROW} $tgt_path (rw)" >&2
       else
-        echo "  [warn] skipping (source not found): $src_path" >&2
+        status_warn "skipping (not found): $src_path" >&2
       fi
     done
   fi
@@ -134,6 +146,8 @@ usage() {
   echo ""
   print_dim "Run 'work-lab up' from any git repository to start."
   print_dim "Your project will be mounted at /workspaces/project inside the container."
+  echo ""
+  print_dim "https://github.com/modern-tooling/work-lab"
   echo ""
 }
 
@@ -229,7 +243,7 @@ cmd_up() {
   if ! command -v devcontainer &> /dev/null; then
     status_fail "devcontainer CLI not found"
     hint "npm install -g @devcontainers/cli"
-    exit 1
+    fail_exit
   fi
 
   # Detect project from current directory
@@ -238,7 +252,7 @@ cmd_up() {
   if [[ -z "$project_root" ]]; then
     status_fail "Not in a git repository"
     hint "run 'work-lab up' from the root of a git project"
-    exit 1
+    fail_exit
   fi
   project_name=$(get_project_name "$project_root")
 
@@ -280,9 +294,9 @@ cmd_shell() {
   if [[ -z "$container_id" ]]; then
     status_fail "Container not running"
     hint "work-lab up"
-    exit 1
+    fail_exit
   fi
-  docker exec -it -u vscode -w /workspaces/project "$container_id" bash
+  docker exec -it -u worklab -w /workspaces/project "$container_id" bash
 }
 
 cmd_mux() {
@@ -291,7 +305,7 @@ cmd_mux() {
   if [[ -z "$container_id" ]]; then
     status_fail "Container not running"
     hint "work-lab up"
-    exit 1
+    fail_exit
   fi
 
   # Check if configured mux is available in container
@@ -300,23 +314,23 @@ cmd_mux() {
     if [[ "$WORK_LAB_MUX" == "zellij" ]]; then
       hint "install zellij via ~/.config/work-lab/post-create.sh"
     fi
-    exit 1
+    fail_exit
   fi
 
   # Attach to existing session or create a new one named 'lab'
   case "$WORK_LAB_MUX" in
     tmux)
-      docker exec -it -u vscode -w /workspaces/project "$container_id" \
+      docker exec -it -u worklab -w /workspaces/project "$container_id" \
         bash -c 'tmux attach -t lab 2>/dev/null || tmux new -s lab'
       ;;
     zellij)
-      docker exec -it -u vscode -w /workspaces/project "$container_id" \
+      docker exec -it -u worklab -w /workspaces/project "$container_id" \
         zellij attach --create lab
       ;;
     *)
       status_fail "Unknown multiplexer: $WORK_LAB_MUX"
       hint "set WORK_LAB_MUX to 'tmux' or 'zellij'"
-      exit 1
+      fail_exit
       ;;
   esac
 }
@@ -510,6 +524,7 @@ cmd_doctor() {
   separator
   if (( errors > 0 )); then
     print_fail "Found $errors error(s). Fix them before running 'work-lab up'."
+    INTENTIONAL_EXIT=1
     return 1
   else
     print_pass "All checks passed. Ready to run 'work-lab up'."
@@ -545,11 +560,11 @@ case "${1:-}" in
     ;;
   "")
     usage
-    exit 1
+    fail_exit
     ;;
   *)
     echo "Unknown command: $1"
     usage
-    exit 1
+    fail_exit
     ;;
 esac
