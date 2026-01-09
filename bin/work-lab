@@ -428,6 +428,9 @@ cmd_ps() {
 cmd_up() {
   require_host
 
+  # Ensure config directory exists (required for devcontainer mount)
+  mkdir -p "$HOME/.config/work-lab"
+
   if ! command -v devcontainer &> /dev/null; then
     status_fail "devcontainer CLI not found"
     hint "npm install -g @devcontainers/cli"
