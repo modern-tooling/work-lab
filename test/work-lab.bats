@@ -399,9 +399,9 @@ EOF
   eval "$(sed -n '/^build_mount_flags()/,/^}/p' "$PROJECT_ROOT/bin/work-lab")"
   output=$(build_mount_flags 2>/dev/null)
 
-  # Verify format: type=bind,source=<src>,target=<tgt>
-  [[ "$output" == *"--mount"* ]]
-  [[ "$output" == *"type=bind,source=$TEMP_DIR/test-mount-file,target=/container/path"* ]]
+  # Verify format: --mount=type=bind,source=<src>,target=<tgt> (with equals sign!)
+  # devcontainer CLI requires --mount=VALUE format, not --mount VALUE
+  [[ "$output" == *"--mount=type=bind,source=$TEMP_DIR/test-mount-file,target=/container/path"* ]]
 
   # Must NOT contain 'readonly' - devcontainer CLI doesn't support it
   [[ "$output" != *"readonly"* ]]

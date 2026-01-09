@@ -6,7 +6,7 @@
 
 set -Eeuo pipefail
 
-VERSION="0.1.5"
+VERSION="0.1.6"
 
 # shellcheck disable=SC2155
 readonly SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
@@ -90,7 +90,7 @@ get_project_name() {
 }
 
 # Build mount flags for devcontainer up
-# Note: devcontainer CLI mount format: type=bind,source=<src>,target=<tgt>
+# Note: devcontainer CLI requires --mount=VALUE format (with equals sign)
 # Read-only not directly supported by devcontainer CLI, but we track intent
 build_mount_flags() {
   local flags=()
@@ -111,7 +111,7 @@ build_mount_flags() {
       src_path="${src_path/#\~/$HOME}"
       src_path="${src_path//\$HOME/$HOME}"
       if [[ -e "$src_path" ]]; then
-        flags+=("--mount" "type=bind,source=$src_path,target=$tgt_path")
+        flags+=("--mount=type=bind,source=$src_path,target=$tgt_path")
         status_ok "$src_path ${ICON_ARROW} $tgt_path (ro)" >&2
       else
         status_warn "skipping (not found): $src_path" >&2
@@ -133,7 +133,7 @@ build_mount_flags() {
       src_path="${src_path/#\~/$HOME}"
       src_path="${src_path//\$HOME/$HOME}"
       if [[ -e "$src_path" ]]; then
-        flags+=("--mount" "type=bind,source=$src_path,target=$tgt_path")
+        flags+=("--mount=type=bind,source=$src_path,target=$tgt_path")
         status_ok "$src_path ${ICON_ARROW} $tgt_path (rw)" >&2
       else
         status_warn "skipping (not found): $src_path" >&2
@@ -452,7 +452,7 @@ cmd_up() {
   local mount_flags=()
 
   # Add project mount (the current git repo)
-  mount_flags+=("--mount" "type=bind,source=$project_root,target=/workspaces/project")
+  mount_flags+=("--mount=type=bind,source=$project_root,target=/workspaces/project")
   printf "  ${C_LABEL}mount${C_RESET}    %s -> /workspaces/project\n" "$project_root"
 
   # Add additional mounts from config

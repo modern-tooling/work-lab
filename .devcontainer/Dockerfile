@@ -46,11 +46,10 @@ RUN curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \
     && rm -rf /var/lib/apt/lists/*
 
 # Install global npm packages
-# - gastown: steveyegge's tool
 # - beads: task management
 # - @anthropic-ai/claude-code: official claude CLI
+# Note: gastown is not yet on npm, install manually if needed
 RUN npm install -g \
-    gastown \
     beads \
     @anthropic-ai/claude-code
 
