@@ -55,9 +55,11 @@ RUN npm install -g \
 
 # Install Go (required for gastown)
 # gastown requires Go >= 1.24.2
-RUN curl -fsSL https://go.dev/dl/go1.24.11.linux-amd64.tar.gz | tar -C /usr/local -xzf - \
-    && ln -s /usr/local/go/bin/go /usr/local/bin/go \
-    && ln -s /usr/local/go/bin/gofmt /usr/local/bin/gofmt
+# Detect architecture and download appropriate binary
+RUN ARCH=$(dpkg --print-architecture) && \
+    curl -fsSL "https://go.dev/dl/go1.24.11.linux-${ARCH}.tar.gz" | tar -C /usr/local -xzf - && \
+    ln -s /usr/local/go/bin/go /usr/local/bin/go && \
+    ln -s /usr/local/go/bin/gofmt /usr/local/bin/gofmt
 
 # Install gastown (AI coding agent orchestrator)
 # Requires Go 1.24+, beads, and tmux (all installed above)

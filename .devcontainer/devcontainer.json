@@ -1,8 +1,6 @@
 {
   "name": "work-lab",
-  "build": {
-    "dockerfile": "Dockerfile"
-  },
+  "image": "ghcr.io/modern-tooling/work-lab:latest",
   "features": {
     "ghcr.io/devcontainers/features/common-utils:2": {
       "installZsh": true,
