@@ -27,6 +27,18 @@ Project devcontainers are where things run.
 They do not need to be the same place.
 ```
 
+```mermaid
+flowchart LR
+    subgraph modeA ["Mode A: No project devcontainer"]
+        A1[work-lab container<br/>think + operate] --> A2[("/workspaces/projects/foo")]
+    end
+
+    subgraph modeB ["Mode B: Project has devcontainer"]
+        B1[work-lab container<br/>think / agent / operate] -.->|"filesystem"| B3[(project repo)]
+        B2[project container<br/>build / run / test] --> B3
+    end
+```
+
 ## Quick start
 
 1. Clone this repo
