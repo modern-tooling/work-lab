@@ -61,6 +61,24 @@ else
   info "Could not pull image (will build locally on first run)"
 fi
 
+# Create symlink in ~/.local/bin (XDG standard for user executables)
+LOCAL_BIN="$HOME/.local/bin"
+mkdir -p "$LOCAL_BIN"
+if [ -L "$LOCAL_BIN/work-lab" ] || [ -e "$LOCAL_BIN/work-lab" ]; then
+  rm -f "$LOCAL_BIN/work-lab"
+fi
+ln -s "$INSTALL_DIR/bin/work-lab" "$LOCAL_BIN/work-lab"
+success "Symlinked to $LOCAL_BIN/work-lab"
+
+# Check if ~/.local/bin is in PATH
+if [[ ":$PATH:" != *":$LOCAL_BIN:"* ]]; then
+  info "~/.local/bin is not in your PATH"
+  info "Add this to your shell profile (~/.bashrc or ~/.zshrc):"
+  info "  export PATH=\"\$PATH:$LOCAL_BIN\""
+else
+  success "~/.local/bin is already in PATH"
+fi
+
 # Check if devcontainer CLI is installed
 if command -v devcontainer &> /dev/null; then
   success "devcontainer CLI is installed"
@@ -69,23 +87,14 @@ else
   info "Install with: npm install -g @devcontainers/cli"
 fi
 
-# PATH instructions
-BIN_PATH="$INSTALL_DIR/bin"
 echo ""
 echo "========================================"
 echo "  Installation complete!"
 echo "========================================"
 echo ""
-echo "Add work-lab to your PATH by adding this to your shell profile:"
-echo ""
-echo "  export PATH=\"\$PATH:$BIN_PATH\""
-echo ""
-echo "Then restart your shell or run:"
-echo ""
-echo "  source ~/.bashrc  # or ~/.zshrc"
-echo ""
 echo "Quick start:"
 echo ""
+echo "  work-lab version  # Verify installation"
 echo "  work-lab doctor   # Check your environment"
 echo "  work-lab up       # Start the container"
 echo "  work-lab tmux     # Attach to tmux session"

@@ -6,6 +6,8 @@
 
 set -e
 
+VERSION="0.1.0"
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_DIR="$(dirname "$SCRIPT_DIR")"
 CONTAINER_NAME="work-lab"
@@ -15,17 +17,22 @@ usage() {
 work-lab - manage the work-lab devcontainer
 
 Usage:
-  work-lab up      Start the devcontainer
-  work-lab shell   Attach an interactive shell
-  work-lab tmux    Attach to tmux session (creates 'lab' if missing)
-  work-lab stop    Stop the container
-  work-lab doctor  Check environment and configuration
-  work-lab help    Show this message
+  work-lab up       Start the devcontainer
+  work-lab shell    Attach an interactive shell
+  work-lab tmux     Attach to tmux session (creates 'lab' if missing)
+  work-lab stop     Stop the container
+  work-lab doctor   Check environment and configuration
+  work-lab version  Show version information
+  work-lab help     Show this message
 
 This script is optional. You can also:
   - Open the folder in VS Code and use "Reopen in Container"
   - Use the devcontainer CLI directly
 EOF
+}
+
+cmd_version() {
+  echo "work-lab $VERSION"
 }
 
 # Find the running container ID
@@ -178,6 +185,9 @@ case "${1:-}" in
     ;;
   doctor)
     cmd_doctor
+    ;;
+  version|--version|-v)
+    cmd_version
     ;;
   help|--help|-h)
     usage
