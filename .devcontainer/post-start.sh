@@ -14,10 +14,10 @@ echo ""
 
 echo "Mounted directories:"
 echo "  /workspaces/work-lab   <- this repo"
-if [[ -d "/workspaces/projects" ]]; then
-  echo "  /workspaces/projects   <- your projects"
+if [[ -d "/workspaces/project" ]]; then
+  echo "  /workspaces/project    <- your project"
 else
-  echo "  /workspaces/projects   <- (not mounted, see README)"
+  echo "  /workspaces/project    <- (not mounted, run 'work-lab up' from a git repo)"
 fi
 echo ""
 
@@ -36,7 +36,7 @@ fi
 
 echo "Suggested next steps:"
 echo "  1. Start a tmux session:  tmux new -s lab"
-echo "  2. Navigate to a project: cd /workspaces/projects/your-project"
+echo "  2. Navigate to project:   cd /workspaces/project"
 echo "  3. Run claude:            claude"
 echo ""
 echo "=========================================="

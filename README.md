@@ -1,5 +1,5 @@
-<!-- doc-audience: human, ai-editable -->
-# work-lab
+<!-- doc-audience: human -->
+# work-lab (Embracing Development in the Post-2025 Future)
 
 A container-based lab for humans and AI coding agents to think, plan, code, and operate in an experimental space protected by guardrails.
 
@@ -81,16 +81,17 @@ export PATH="$PATH:$HOME/.local/share/work-lab/bin"
 ## Quick start
 
 ```bash
-work-lab doctor  # Check your environment
-work-lab up      # Start the container
-work-lab tmux    # Attach to tmux session
+cd /path/to/your/project    # Any git repository
+work-lab doctor              # Check your environment
+work-lab up                  # Start the container
+work-lab tmux                # Attach to tmux session
 ```
 
 Inside the container:
 
 ```bash
-cd /workspaces/projects/your-project
-claude    # or opencode, aider, etc.
+cd /workspaces/project       # Your project is mounted here
+claude                        # or gastown, opencode, aider, etc.
 ```
 
 ### Helper commands
@@ -100,6 +101,7 @@ work-lab up       # Start the devcontainer
 work-lab shell    # Attach an interactive shell
 work-lab tmux     # Attach to tmux session (creates 'lab' if missing)
 work-lab stop     # Stop the container
+work-lab ps       # List running work-lab containers
 work-lab doctor   # Check environment and configuration
 work-lab version  # Show version information
 ```
@@ -193,74 +195,36 @@ flowchart TB
 ### Example: Running Gastown
 
 ```bash
-work-lab tmux                           # Attach to work-lab
-cd /workspaces/projects/your-project    # Navigate to project
-gastown                                  # Start Gastown orchestrator
+work-lab tmux                # Attach to work-lab
+cd /workspaces/project       # Your project is already here
+gastown                      # Start Gastown orchestrator
 ```
 
 ---
 
 ## Configuration
 
-### Mounting projects
+### Project mounting
 
-By default, `~/projects` on your host mounts to `/workspaces/projects` in the container.
+When you run `work-lab up` from any git repository, your project is automatically mounted to `/workspaces/project` in the container. No configuration needed for basic usage.
 
-To change this, edit `.devcontainer/devcontainer.json`:
+### User customization
 
-```json
-"mounts": [
-  "source=/your/path/here,target=/workspaces/projects,type=bind,consistency=cached"
-]
-```
-
-### Configuration file
-
-Customize work-lab via `~/.config/work-lab/config` (sourced shell script):
-
-```bash
-mkdir -p ~/.config/work-lab
-cat > ~/.config/work-lab/config << 'EOF'
-# Override projects directory
-export WORK_LAB_PROJECTS_DIR="$HOME/Code"
-
-# Mount configs read-only (agent can read but not modify)
-WORK_LAB_MOUNTS_RO=(
-  "$HOME/.gitconfig:/home/vscode/.gitconfig"
-  "$HOME/.claude:/home/vscode/.claude-host"
-)
-
-# Mount directories read-write (for caches, state)
-WORK_LAB_MOUNTS_RW=(
-  "$HOME/.cache/work-lab:/home/vscode/.cache"
-)
-EOF
-```
-
-**Available options:**
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `WORK_LAB_PROJECTS_DIR` | `$HOME/projects` | Host directory mounted to `/workspaces/projects` |
-| `WORK_LAB_IMAGE` | `ghcr.io/modern-tooling/work-lab:latest` | Docker image to use |
-| `WORK_LAB_MOUNTS_RO` | `()` | Array of read-only mounts (`"source:target"`) |
-| `WORK_LAB_MOUNTS_RW` | `()` | Array of read-write mounts (`"source:target"`) |
-
-**Precedence:** Environment variables > config file > defaults
-
-### Lifecycle hooks
+Customize work-lab via `~/.config/work-lab/` on your host (XDG convention):
 
 | File | When it runs |
 |------|--------------|
-| `~/.config/work-lab/post-create.sh` | Once, after container creation |
-| `~/.config/work-lab/post-start.sh` | Every time container starts |
+| `post-create.sh` | Once, after container creation |
+| `post-start.sh` | Every time container starts |
 
 **Example:** Install a custom coding agent:
 
 ```bash
+mkdir -p ~/.config/work-lab
 cat > ~/.config/work-lab/post-create.sh << 'EOF'
 #!/usr/bin/env bash
 npm install -g opencode
+cargo install --locked zellij  # install zellij tmux alternative [optional]
 EOF
 ```
 
@@ -295,11 +259,11 @@ flowchart TB
     end
     subgraph Container["work-lab container"]
         Agent["claude --dangerously-skip-permissions"]
-        Projects["/workspaces/projects"]
+        Project["/workspaces/project"]
     end
-    HostProjects["~/projects"]
-    Agent --> Projects
-    Projects -.->|bind mount| HostProjects
+    HostProject["your-project/"]
+    Agent --> Project
+    Project -.->|bind mount| HostProject
     style Host fill:#fee2e2,stroke:#dc2626
     style Container fill:#dcfce7,stroke:#16a34a
     style Agent fill:#4a9eff,stroke:#2d7ad9,color:#fff
@@ -311,9 +275,17 @@ flowchart TB
 | Cloud credentials | Accessible | Not mounted |
 | Browser data | Accessible | Not mounted |
 | System files | Accessible | Container's own |
-| Your projects | Accessible | Only `/workspaces/projects` |
+| Your projects | Accessible | Only `/workspaces/project` |
 
 **Result:** Agent autonomy (no permission prompts) with bounded risk (can only touch mounted project files).
+
+### Supply chain considerations
+
+The one-liner install (`curl | bash`) and `:latest` Docker tags carry inherent supply chain risks. For higher security:
+
+1. **Review before running:** Download `install.sh`, inspect it, then execute
+2. **Pin image versions:** Use specific SHA digests instead of `:latest`
+3. **Use Homebrew:** `brew install work-lab` provides formula review and checksums
 
 ---
 

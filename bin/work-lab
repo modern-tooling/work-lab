@@ -20,7 +20,6 @@ trap 'printf "Error at line %d: exit %d\n" "$LINENO" "$?" >&2' ERR
 # Configuration
 # ─────────────────────────────────────────────────────────────────────────────
 # Defaults (can be overridden by ~/.config/work-lab/config or environment)
-: "${WORK_LAB_PROJECTS_DIR:=$HOME/projects}"
 : "${WORK_LAB_IMAGE:=ghcr.io/modern-tooling/work-lab:latest}"
 
 # Additional mounts (arrays, set in config file)
@@ -36,8 +35,21 @@ if [[ -f "$config_file" ]]; then
 fi
 
 # Export for devcontainer.json ${localEnv:...} substitution
-export WORK_LAB_PROJECTS_DIR
 export WORK_LAB_IMAGE
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Project detection
+# ─────────────────────────────────────────────────────────────────────────────
+# Find the git root of the current directory (or empty if not in a git repo)
+find_git_root() {
+  git rev-parse --show-toplevel 2>/dev/null
+}
+
+# Get the project name from the git root directory
+get_project_name() {
+  local git_root="$1"
+  basename "$git_root"
+}
 
 # Build mount flags for devcontainer up
 build_mount_flags() {
@@ -96,20 +108,22 @@ build_mount_flags() {
 
 usage() {
   cat << EOF
-work-lab - manage the work-lab devcontainer
+work-lab - containerized environment for AI coding agents
 
-Usage:
-  work-lab up       Start the devcontainer
-  work-lab shell    Attach an interactive shell
-  work-lab tmux     Attach to tmux session (creates 'lab' if missing)
-  work-lab stop     Stop the container
-  work-lab doctor   Check environment and configuration
-  work-lab version  Show version information
-  work-lab help     Show this message
+Usage: work-lab <command>
 
-This script is optional. You can also:
-  - Open the folder in VS Code and use "Reopen in Container"
-  - Use the devcontainer CLI directly
+Commands:
+  up        Start work-lab for the current git project
+  shell     Attach an interactive shell
+  tmux      Attach to tmux session (creates 'lab' if missing)
+  stop      Stop the container
+  ps        List running work-lab containers
+  doctor    Check environment and configuration
+  version   Show version information
+  help      Show this message
+
+Run 'work-lab up' from any git repository to start.
+Your project will be mounted at /workspaces/project inside the container.
 EOF
 }
 
@@ -117,9 +131,18 @@ cmd_version() {
   echo "work-lab $VERSION"
 }
 
-# Find the running container ID
+# Find the work-lab container (uses devcontainer's label)
 find_container() {
   docker ps -q --filter "label=devcontainer.local_folder=$REPO_DIR" 2>/dev/null | head -n 1
+}
+
+# List all devcontainer instances (work-lab uses devcontainer under the hood)
+cmd_ps() {
+  echo "Running devcontainers:"
+  echo ""
+  docker ps --filter "label=devcontainer.local_folder" \
+    --format "table {{.ID}}\t{{.Names}}\t{{.Status}}\t{{.Label \"devcontainer.local_folder\"}}" \
+    2>/dev/null || echo "  (none)"
 }
 
 cmd_up() {
@@ -130,17 +153,38 @@ cmd_up() {
     exit 1
   fi
 
-  echo "Starting devcontainer..."
+  # Detect project from current directory
+  local project_root project_name
+  project_root=$(find_git_root)
+  if [[ -z "$project_root" ]]; then
+    echo "Error: Not in a git repository." >&2
+    echo "Run 'work-lab up' from the root of a git project." >&2
+    exit 1
+  fi
+  project_name=$(get_project_name "$project_root")
 
-  # Build additional mount flags from config
+  echo "Starting work-lab for: $project_name"
+  echo "  Project: $project_root"
+
+  # Build mount flags
   local mount_flags=()
-  if [[ ${#WORK_LAB_MOUNTS_RO[@]} -gt 0 ]] || [[ ${#WORK_LAB_MOUNTS_RW[@]} -gt 0 ]]; then
+
+  # Add project mount (the current git repo)
+  mount_flags+=("--mount" "type=bind,source=$project_root,target=/workspaces/project")
+  echo "  Mount: $project_root -> /workspaces/project"
+
+  # Add additional mounts from config
+  if (( ${#WORK_LAB_MOUNTS_RO[@]} > 0 )) || (( ${#WORK_LAB_MOUNTS_RW[@]} > 0 )); then
     echo "Additional mounts:"
-    readarray -t mount_flags < <(build_mount_flags)
+    readarray -t -O "${#mount_flags[@]}" mount_flags < <(build_mount_flags)
   fi
 
-  # Run devcontainer up with any additional mounts
+  # Run devcontainer up
   devcontainer up --workspace-folder "$REPO_DIR" "${mount_flags[@]}"
+
+  echo ""
+  echo "Ready! Run 'work-lab shell' or 'work-lab tmux' to attach."
+  echo "Project is at: /workspaces/project"
 }
 
 cmd_shell() {
@@ -150,7 +194,7 @@ cmd_shell() {
     echo "Container not running. Start it with: work-lab up" >&2
     exit 1
   fi
-  docker exec -it -u vscode -w /workspaces/work-lab "$container_id" bash
+  docker exec -it -u vscode -w /workspaces/project "$container_id" bash
 }
 
 cmd_tmux() {
@@ -161,7 +205,7 @@ cmd_tmux() {
     exit 1
   fi
   # Attach to existing session or create a new one named 'lab'
-  docker exec -it -u vscode -w /workspaces/work-lab "$container_id" \
+  docker exec -it -u vscode -w /workspaces/project "$container_id" \
     bash -c 'tmux attach -t lab 2>/dev/null || tmux new -s lab'
 }
 
@@ -242,20 +286,19 @@ cmd_doctor() {
   else
     echo "  [info] config file: not found (using defaults)"
   fi
-  echo "  WORK_LAB_PROJECTS_DIR=$WORK_LAB_PROJECTS_DIR"
   echo "  WORK_LAB_IMAGE=$WORK_LAB_IMAGE"
   echo ""
 
-  # check projects directory
-  echo "Projects directory:"
-  if [[ -d "$WORK_LAB_PROJECTS_DIR" ]]; then
-    project_count=$(find "$WORK_LAB_PROJECTS_DIR" -maxdepth 1 -type d 2>/dev/null | wc -l | tr -d ' ')
-    echo "  [ok] $WORK_LAB_PROJECTS_DIR ($((project_count - 1)) subdirectories)"
+  # check current project (git repo)
+  echo "Current project:"
+  local git_root
+  git_root=$(find_git_root)
+  if [[ -n "$git_root" ]]; then
+    echo "  [ok] $(get_project_name "$git_root")"
+    echo "       $git_root"
   else
-    echo "  [error] $WORK_LAB_PROJECTS_DIR not found"
-    echo "         create it: mkdir -p \"$WORK_LAB_PROJECTS_DIR\""
-    echo "         or set WORK_LAB_PROJECTS_DIR in config"
-    ((errors++))
+    echo "  [warn] not in a git repository"
+    echo "         run 'work-lab up' from within a git project"
   fi
   echo ""
 
@@ -343,17 +386,16 @@ cmd_doctor() {
   fi
   echo ""
 
-  # check current directory context
-  echo "Current directory:"
-  echo "  $PWD"
-  if [[ -d ".devcontainer" ]] || [[ -f ".devcontainer.json" ]]; then
-    if [[ "$PWD" == "$REPO_DIR" ]]; then
-      echo "  [info] this is the work-lab repo"
+  # mode detection
+  echo "Mode:"
+  if [[ -n "$git_root" ]]; then
+    if [[ -d "$git_root/.devcontainer" ]] || [[ -f "$git_root/.devcontainer.json" ]]; then
+      echo "  [info] Project has devcontainer -> Sidecar mode"
+      echo "         work-lab runs alongside project's own devcontainer"
     else
-      echo "  [info] has devcontainer -> Sidecar mode recommended"
+      echo "  [info] Standalone mode"
+      echo "         work-lab provides the development environment"
     fi
-  else
-    echo "  [info] no devcontainer -> Standalone mode"
   fi
   echo ""
 
@@ -381,6 +423,9 @@ case "${1:-}" in
     ;;
   stop)
     cmd_stop
+    ;;
+  ps)
+    cmd_ps
     ;;
   doctor)
     cmd_doctor
