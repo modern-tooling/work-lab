@@ -7,7 +7,7 @@ A container-based lab for humans and AI coding agents to think, plan, code, and 
 
 **Why it's great:**
 
-- **Works standalone** - Want to run an AI agent within a environment with guardrails? work-lab IS your answer
+- **Works standalone** - Want to run an AI agent within a environment with guardrails? `work-lab` IS your answer
 - **Works with devcontainers** - Run alongside any project's devcontainer via SSH tunnel
 - **Zero project changes** - Never modifies your repos
 - **Safe agent execution** - Run `claude --dangerously-skip-permissions` without the danger
@@ -157,7 +157,7 @@ flowchart TB
 
 ### Sidecar mode (Work with existing Devcontainer)
 
-Run work-lab alongside your project's devcontainer. Both containers mount the same project - work-lab handles AI agents, the devcontainer runs your entire development environment (builds, tests, services, databases, the works).
+Run `work-lab` alongside your project's devcontainer. Both containers mount the same project - `work-lab` handles AI agents, the devcontainer runs your entire development environment (builds, tests, services, databases, the works).
 
 ```mermaid
 flowchart TB
@@ -179,7 +179,7 @@ flowchart TB
 | work-lab | Thinking, agents, operations |
 | Project's devcontainer | Build, run, test, services |
 
-**The magic:** From inside work-lab, run commands in the devcontainer:
+**The magic:** From inside `work-lab`, run commands in the devcontainer:
 
 ```bash
 wl dc npm test      # runs in devcontainer
@@ -209,7 +209,7 @@ You can always update your `~/.config/work-lab/post-create.sh` to install additi
 | [Beads](https://github.com/steveyegge/beads) | Task management for AI coding agents (optional to use) |
 | [Gastown](https://github.com/steveyegge/gastown) (`gt`) | AI coding agent orchestrator (optional to use) |
 
-> **Note:** work-lab is **not** specifically for Gastown — it's a general-purpose environment for any AI coding agent. Gastown happens to be one of the best AI coding agent orchestrators as of January 2026, so it's included by default.
+> **Note:** `work-lab` is **not** specifically for Gastown — it's a general-purpose environment for any AI coding agent. Gastown happens to be one of the best AI coding agent orchestrators as of January 2026, so it's included by default.
 
 > **Future change:** Claude Code may be removed as a pre-installed default in a future release. You can always install it via `~/.config/work-lab/post-create.sh` if needed.
 
