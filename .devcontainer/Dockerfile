@@ -4,16 +4,39 @@
 
 FROM mcr.microsoft.com/devcontainers/base:ubuntu-24.04
 
+# Create worklab user (replacing default vscode user)
+RUN useradd -m -s /bin/bash worklab && \
+    usermod -aG sudo worklab && \
+    echo "worklab ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers.d/worklab
+
 # Install core tools via apt
 RUN apt-get update && apt-get install -y --no-install-recommends \
+    # Terminal & shell
     tmux \
+    tree \
+    # Version control
     git \
-    curl \
+    # Text & data processing (Claude Code favorites)
     jq \
     ripgrep \
     fzf \
+    fd-find \
+    bat \
+    # Network tools
+    curl \
+    nmap \
+    net-tools \
+    iputils-ping \
+    dnsutils \
     ca-certificates \
-    && rm -rf /var/lib/apt/lists/*
+    # System monitoring
+    htop \
+    # Build tools
+    make \
+    && rm -rf /var/lib/apt/lists/* \
+    # Create symlinks for tools with different names on Ubuntu
+    && ln -sf /usr/bin/batcat /usr/bin/bat \
+    && ln -sf /usr/bin/fdfind /usr/bin/fd
 
 # Install Node.js LTS via NodeSource
 # Using NodeSource distribution for a stable, well-maintained LTS version.
@@ -31,37 +54,9 @@ RUN npm install -g \
     beads \
     @anthropic-ai/claude-code
 
-# Create minimal tmux config for vscode user
-RUN mkdir -p /home/vscode && \
-    cat > /home/vscode/.tmux.conf << 'EOF'
-# work-lab tmux config
-# Minimal, functional defaults.
+# Copy worklab user configs
+COPY home/ /home/worklab/
+RUN chown -R worklab:worklab /home/worklab
 
-# Enable mouse support
-set -g mouse on
-
-# Start window numbering at 1
-set -g base-index 1
-setw -g pane-base-index 1
-
-# Simple status bar
-set -g status-style 'bg=#333333 fg=#ffffff'
-set -g status-left '[#S] '
-set -g status-right '%H:%M'
-set -g status-left-length 20
-
-# Increase scrollback
-set -g history-limit 10000
-
-# Reduce escape delay (better for vim users)
-set -sg escape-time 10
-
-# Use 256 colors
-set -g default-terminal "screen-256color"
-EOF
-
-# Ensure correct ownership
-RUN chown -R vscode:vscode /home/vscode
-
-USER vscode
+USER worklab
 WORKDIR /workspaces/work-lab

@@ -20,6 +20,15 @@
 # export WORK_LAB_IMAGE="my-registry/my-image:v1.2.3"
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Default shell
+# ─────────────────────────────────────────────────────────────────────────────
+# Override the default shell inside work-lab.
+# By default, work-lab detects your host shell (bash/zsh) and uses that.
+# Set this to force a specific shell.
+#
+# export WORK_LAB_SHELL="zsh"
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Terminal multiplexer
 # ─────────────────────────────────────────────────────────────────────────────
 # Choose between tmux (default, pre-installed) or zellij.
@@ -38,17 +47,17 @@
 # NOTE: ~/.claude is mounted by default. Add additional mounts here.
 WORK_LAB_MOUNTS_RO=(
   # Git config (user name, email, aliases)
-  # "$HOME/.gitconfig:/home/vscode/.gitconfig"
+  # "$HOME/.gitconfig:/home/worklab/.gitconfig"
 
   # SSH public keys only (not private keys!)
-  # "$HOME/.ssh/id_ed25519.pub:/home/vscode/.ssh/id_ed25519.pub"
+  # "$HOME/.ssh/id_ed25519.pub:/home/worklab/.ssh/id_ed25519.pub"
 )
 
 # Read-write mounts (for state that should persist):
 WORK_LAB_MOUNTS_RW=(
   # Persistent cache directory
-  # "$HOME/.cache/work-lab:/home/vscode/.cache/work-lab"
+  # "$HOME/.cache/work-lab:/home/worklab/.cache/work-lab"
 
   # Shared npm cache
-  # "$HOME/.npm:/home/vscode/.npm"
+  # "$HOME/.npm:/home/worklab/.npm"
 )
