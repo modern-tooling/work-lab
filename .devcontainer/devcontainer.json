@@ -1,0 +1,22 @@
+{
+  "name": "work-lab",
+  "build": {
+    "dockerfile": "Dockerfile"
+  },
+  "workspaceFolder": "/workspaces/work-lab",
+  "workspaceMount": "source=${localWorkspaceFolder},target=/workspaces/work-lab,type=bind,consistency=cached",
+  "mounts": [
+    // Mount your projects directory into the container.
+    // Adjust the host path if your projects live elsewhere.
+    "source=${localEnv:HOME}/projects,target=/workspaces/projects,type=bind,consistency=cached"
+  ],
+  "remoteUser": "vscode",
+  "postCreateCommand": "bash .devcontainer/postCreate.sh",
+  "customizations": {
+    "vscode": {
+      "settings": {
+        "terminal.integrated.defaultProfile.linux": "bash"
+      }
+    }
+  }
+}

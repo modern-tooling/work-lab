@@ -1,0 +1,29 @@
+# work-lab .gitignore
+
+# Local customizations (not checked in)
+.local/
+local/
+*.local
+*.local.*
+
+# Editor/IDE
+.idea/
+*.swp
+*.swo
+*~
+.vscode/*
+!.vscode/settings.json.example
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Node (if experimenting locally)
+node_modules/
+
+# Logs
+*.log
+
+# Temporary files
+tmp/
+temp/

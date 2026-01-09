@@ -7,7 +7,7 @@ A calm, boring, reliable devcontainer for experimental work.
 work-lab is an **optional, personal** environment for:
 
 - Thinking and planning
-- Running coding agents (Claude, Gastown)
+- Running coding agents ([Claude](https://github.com/anthropics/claude-code), [Gastown](https://github.com/steveyegge/gastown), [SageOx](https://github.com/sageox/))
 - Operating with tmux
 - Experimenting safely
 
