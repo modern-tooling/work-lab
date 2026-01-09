@@ -6,7 +6,7 @@
 
 set -Eeuo pipefail
 
-VERSION="0.2.0"
+VERSION="0.3.0"
 
 # shellcheck disable=SC2155
 readonly SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
@@ -293,9 +293,162 @@ cmd_release_notes() {
   done
 }
 
-# Find the work-lab container (uses devcontainer's label)
+# Find the work-lab container for current project
+# Looks for containers with /workspaces/project mounted to current git root
+# Returns empty string if not found (always returns 0 to avoid errexit issues)
 find_container() {
-  docker ps -q --filter "label=devcontainer.local_folder=$REPO_DIR" 2>/dev/null | head -n 1
+  local project_root
+  project_root=$(find_git_root 2>/dev/null) || { echo ""; return 0; }
+
+  local cid
+  while read -r cid; do
+    [[ -z "$cid" ]] && continue
+    local mount_source
+    mount_source=$(docker inspect "$cid" --format '{{range .Mounts}}{{if eq .Destination "/workspaces/project"}}{{.Source}}{{end}}{{end}}' 2>/dev/null)
+    if [[ "$mount_source" == "$project_root" ]]; then
+      echo "$cid"
+      return 0
+    fi
+  done < <(docker ps -q --filter "label=devcontainer.local_folder" 2>/dev/null)
+
+  echo ""
+  return 0
+}
+
+# Check if SSH tunnel credentials exist for a project
+# Uses shared filesystem approach - no Docker socket needed
+# Returns 0 if credentials found, 1 otherwise
+check_project_ssh_tunnel() {
+  local project_path="$1"
+  [[ -f "$project_path/.work-lab/ssh-key" ]] && \
+  [[ -f "$project_path/.work-lab/ip" ]]
+}
+
+# Check if a devcontainer has sshd available (quick port probe)
+# Returns 0 if sshd detected, 1 otherwise
+check_devcontainer_sshd() {
+  local container_id="$1"
+  local dc_ip
+  dc_ip=$(docker inspect --format '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' "$container_id" 2>/dev/null | head -1)
+  [[ -n "$dc_ip" ]] && timeout 0.5 bash -c "echo >/dev/tcp/$dc_ip/22" 2>/dev/null
+}
+
+# Ensure SSH tunnel is set up for a project
+# Called lazily by mux/shell/doctor - runs on HOST with Docker access
+#
+# DESIGN NOTES:
+# - Only creates .work-lab/ when devcontainer exists AND has sshd running
+#   (don't clutter projects that don't use devcontainers)
+# - Creates shared Docker network for routing between containers
+#   (by default, each devcontainer is on its own network)
+# - Injects public key via docker exec (host has Docker access, work-lab doesn't)
+# - work-lab reads credentials from .work-lab/ to connect (no Docker needed)
+#
+ensure_ssh_tunnel() {
+  local project_path="$1"
+  local worklab_dir="$project_path/.work-lab"
+  local key_file="$worklab_dir/ssh-key"
+  local pubkey_file="$worklab_dir/ssh-key.pub"
+  local ip_file="$worklab_dir/ip"
+  local user_file="$worklab_dir/user"
+
+  # Find project's devcontainer first - don't create .work-lab/ if no devcontainer
+  local project_name dc_id
+  project_name=$(basename "$project_path")
+
+  dc_id=$(docker ps --filter "label=devcontainer.local_folder=$project_path" \
+    --format "{{.ID}}" 2>/dev/null | head -n 1)
+
+  if [[ -z "$dc_id" ]]; then
+    # No devcontainer running - don't create .work-lab/ (keep project clean)
+    return 0
+  fi
+
+  # Check if devcontainer has sshd running before creating anything
+  local dc_ip
+  dc_ip=$(docker inspect --format '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' "$dc_id" 2>/dev/null | head -1)
+
+  if [[ -z "$dc_ip" ]]; then
+    return 0
+  fi
+
+  if ! timeout 1 bash -c "echo >/dev/tcp/$dc_ip/22" 2>/dev/null; then
+    # sshd not running - don't create .work-lab/ (user hasn't enabled sshd feature)
+    return 0
+  fi
+
+  # At this point we have a running devcontainer with sshd - proceed with setup
+
+  # Create .work-lab directory if needed
+  if [[ ! -d "$worklab_dir" ]]; then
+    mkdir -p "$worklab_dir"
+    chmod 700 "$worklab_dir"
+  fi
+
+  # Generate SSH keypair if needed
+  if [[ ! -f "$key_file" ]]; then
+    ssh-keygen -t ed25519 -f "$key_file" -N "" -q -C "work-lab-tunnel"
+    chmod 600 "$key_file"
+    chmod 644 "$pubkey_file"
+  fi
+
+  # NOTE: We intentionally do NOT auto-modify .gitignore
+  # Users should add .work-lab/ to their .gitignore if desired
+  # This avoids cluttering projects and surprising users with file changes
+
+  # Find work-lab container for this project (to set up network routing)
+  local wl_id
+  wl_id=$(find_container)
+
+  # Create shared network for tunnel routing (containers on different networks can't reach each other)
+  # This is idempotent - network is created once and reused
+  docker network create work-lab-tunnel 2>/dev/null || true
+
+  # Connect both containers to shared network (idempotent - won't error if already connected)
+  if [[ -n "$wl_id" ]]; then
+    docker network connect work-lab-tunnel "$wl_id" 2>/dev/null || true
+  fi
+  docker network connect work-lab-tunnel "$dc_id" 2>/dev/null || true
+
+  # Get devcontainer's IP on the shared network (may differ from original IP)
+  local tunnel_ip
+  tunnel_ip=$(docker inspect --format '{{range $k, $v := .NetworkSettings.Networks}}{{if eq $k "work-lab-tunnel"}}{{$v.IPAddress}}{{end}}{{end}}' "$dc_id" 2>/dev/null)
+
+  # Fall back to original IP if shared network IP not available
+  if [[ -z "$tunnel_ip" ]]; then
+    tunnel_ip="$dc_ip"
+  fi
+
+  # Find the SSH user in devcontainer
+  local dc_user
+  dc_user=$(docker inspect --format '{{.Config.User}}' "$dc_id" 2>/dev/null)
+  if [[ -z "$dc_user" ]] || [[ "$dc_user" == "root" ]]; then
+    for try_user in vscode node; do
+      if docker exec "$dc_id" id "$try_user" &>/dev/null; then
+        dc_user="$try_user"
+        break
+      fi
+    done
+  fi
+  dc_user="${dc_user:-root}"
+
+  # Write connection info (using tunnel network IP)
+  echo "$tunnel_ip" > "$ip_file"
+  echo "$dc_user" > "$user_file"
+
+  # Inject public key into devcontainer's authorized_keys (if not already there)
+  local pubkey
+  pubkey=$(cat "$pubkey_file")
+
+  docker exec "$dc_id" bash -c "
+    mkdir -p ~/.ssh
+    chmod 700 ~/.ssh
+    touch ~/.ssh/authorized_keys
+    chmod 600 ~/.ssh/authorized_keys
+    if ! grep -qF 'work-lab-tunnel' ~/.ssh/authorized_keys 2>/dev/null; then
+      echo '$pubkey' >> ~/.ssh/authorized_keys
+    fi
+  " 2>/dev/null || true
 }
 
 # List devcontainers grouped by project, showing work-lab + devcontainer pairs
@@ -397,7 +550,14 @@ cmd_ps() {
           printf "  %s   └─ ${C_DIM}%s${C_RESET}  ${C_PASS}●${C_RESET}  ${C_DIM}%s${C_RESET}\n" "$connector" "${wl_id:0:12}" "${container_name[$wl_id]}"
         done
       fi
-      printf "  └─ ${C_DIM}devcontainer${C_RESET}  ${C_DIM}%s${C_RESET}  ${C_PASS}●${C_RESET}  ${C_DIM}%s${C_RESET}\n" "${dc_id:0:12}" "${container_name[$dc_id]}"
+      # show devcontainer with SSH tunnel status
+      local ssh_indicator=""
+      if check_project_ssh_tunnel "$project"; then
+        ssh_indicator="${C_PASS}⚡${C_RESET}"  # tunnel configured
+      elif check_devcontainer_sshd "$dc_id"; then
+        ssh_indicator="${C_WARN}~${C_RESET}"  # sshd available, not configured
+      fi
+      printf "  └─ ${C_DIM}devcontainer${C_RESET}  ${C_DIM}%s${C_RESET}  ${C_PASS}●${C_RESET} %b ${C_DIM}%s${C_RESET}\n" "${dc_id:0:12}" "$ssh_indicator" "${container_name[$dc_id]}"
     elif (( wl_count > 0 )); then
       # Only work-lab(s), no devcontainer running
       local has_devcontainer=0
@@ -432,12 +592,20 @@ cmd_ps() {
     elif [[ -n "$dc_id" ]]; then
       # Only devcontainer (no work-lab) - show work-lab as stopped, devcontainer as running
       printf "  ├─ ${C_DIM}work-lab${C_RESET}      ${C_DIM}────────────${C_RESET}  ${C_WARN}○${C_RESET}  ${C_WARN}stopped${C_RESET}\n"
-      printf "  └─ ${C_DIM}devcontainer${C_RESET}  ${C_DIM}%s${C_RESET}  ${C_PASS}●${C_RESET}  ${C_DIM}%s${C_RESET}\n" "${dc_id:0:12}" "${container_name[$dc_id]}"
+      # show devcontainer with SSH tunnel status
+      local ssh_indicator=""
+      if check_project_ssh_tunnel "$project"; then
+        ssh_indicator="${C_PASS}⚡${C_RESET}"  # tunnel configured
+      elif check_devcontainer_sshd "$dc_id"; then
+        ssh_indicator="${C_WARN}~${C_RESET}"  # sshd available, not configured
+      fi
+      printf "  └─ ${C_DIM}devcontainer${C_RESET}  ${C_DIM}%s${C_RESET}  ${C_PASS}●${C_RESET} %b ${C_DIM}%s${C_RESET}\n" "${dc_id:0:12}" "$ssh_indicator" "${container_name[$dc_id]}"
     fi
   done
 
   echo ""
   print_dim "$project_count project(s)"
+  print_dim "Legend: ● running  ○ stopped  ⚡ tunnel ready  ~ can tunnel (wl mux)"
 }
 
 cmd_up() {
@@ -508,11 +676,35 @@ cmd_shell() {
   local container_id
   container_id=$(find_container)
   if [[ -z "$container_id" ]]; then
-    status_fail "Container not running"
-    hint "work-lab up"
+    local project_name
+    project_name=$(basename "$(find_git_root 2>/dev/null)" 2>/dev/null || echo "this project")
+    status_fail "No work-lab running for $project_name"
+    hint "Start with: work-lab up"
     fail_exit
   fi
-  docker exec -it -u worklab -w /workspaces/project "$container_id" bash
+
+  # Ensure SSH tunnel is set up (lazy initialization from host)
+  local project_root
+  project_root=$(find_git_root 2>/dev/null)
+  if [[ -n "$project_root" ]]; then
+    ensure_ssh_tunnel "$project_root"
+  fi
+
+  # Build docker exec flags based on TTY availability
+  local -a exec_flags=("-u" "worklab" "-w" "/workspaces/project")
+  if [[ -t 0 ]]; then
+    exec_flags+=("-it")
+  else
+    exec_flags+=("-i")
+  fi
+
+  if [[ $# -gt 0 ]]; then
+    # Run the provided command
+    docker exec "${exec_flags[@]}" "$container_id" bash -c "$*"
+  else
+    # Interactive shell
+    docker exec "${exec_flags[@]}" "$container_id" bash
+  fi
 }
 
 cmd_mux() {
@@ -521,9 +713,18 @@ cmd_mux() {
   local container_id
   container_id=$(find_container)
   if [[ -z "$container_id" ]]; then
-    status_fail "Container not running"
-    hint "work-lab up"
+    local project_name
+    project_name=$(basename "$(find_git_root 2>/dev/null)" 2>/dev/null || echo "this project")
+    status_fail "No work-lab running for $project_name"
+    hint "Start with: work-lab up"
     fail_exit
+  fi
+
+  # Ensure SSH tunnel is set up (lazy initialization from host)
+  local project_root
+  project_root=$(find_git_root 2>/dev/null)
+  if [[ -n "$project_root" ]]; then
+    ensure_ssh_tunnel "$project_root"
   fi
 
   # Check if configured mux is available in container
@@ -589,23 +790,41 @@ cmd_dc() {
     return 0
   fi
 
-  # Find project path and name
-  local project_path project_name
+  # When inside work-lab, use SSH tunnel instead of docker exec
   if is_inside_container; then
-    project_path="/workspaces/project"
+    local project_path="/workspaces/project"
     if [[ ! -d "$project_path" ]]; then
       status_fail "Project not mounted at /workspaces/project"
       fail_exit
     fi
-    project_name=$(basename "$project_path")
-  else
-    project_path=$(find_git_root)
-    if [[ -z "$project_path" ]]; then
-      status_fail "Not in a git repository"
+
+    # Check if SSH tunnel is configured
+    if [[ -f "$project_path/.work-lab/ssh-key" ]] && [[ -f "$project_path/.work-lab/ip" ]]; then
+      # Use dc-ssh to run command via SSH tunnel
+      exec dc-ssh "$cmd" "$@"
+    else
+      status_fail "SSH tunnel not configured"
+      echo ""
+      hint "From the HOST, run:"
+      printf "  ${C_COMMAND}wl mux${C_RESET}    (configures tunnel automatically)\n"
+      echo ""
+      hint "Then use prefix + S in tmux to access devcontainer"
+      hint "Or run 'wl dc <cmd>' again after tunnel is configured"
       fail_exit
     fi
-    project_name=$(basename "$project_path")
   fi
+
+  # On host: use docker exec
+  local project_path project_name
+  project_path=$(find_git_root)
+  if [[ -z "$project_path" ]]; then
+    status_fail "Not in a git repository"
+    fail_exit
+  fi
+  project_name=$(basename "$project_path")
+
+  # Also ensure SSH tunnel is set up for future use from inside work-lab
+  ensure_ssh_tunnel "$project_path" 2>/dev/null || true
 
   # Find the project's devcontainer using path-matching
   local dc_id exact_match="" fallback_match=""
@@ -663,11 +882,43 @@ cmd_dc() {
     fail_exit
   fi
 
+  # Find the default user for this devcontainer (common defaults: vscode, node, root)
+  local dc_user
+  dc_user=$(docker inspect --format '{{.Config.User}}' "$dc_id" 2>/dev/null)
+  if [[ -z "$dc_user" ]] || [[ "$dc_user" == "root" ]]; then
+    # Try to find a non-root user
+    for try_user in vscode node; do
+      if docker exec "$dc_id" id "$try_user" &>/dev/null; then
+        dc_user="$try_user"
+        break
+      fi
+    done
+  fi
+  dc_user="${dc_user:-root}"
+
+  # Find workspace directory inside the container (try common patterns)
+  local dc_workdir=""
+  for try_dir in "/workspaces/$project_name" "/workspace" "/workspaces" "/app" "/"; do
+    if docker exec "$dc_id" test -d "$try_dir" 2>/dev/null; then
+      dc_workdir="$try_dir"
+      break
+    fi
+  done
+  dc_workdir="${dc_workdir:-/}"
+
+  # Build exec flags
+  local -a exec_flags=("-u" "$dc_user" "-w" "$dc_workdir")
+  if [[ -t 0 ]]; then
+    exec_flags+=("-it")
+  else
+    exec_flags+=("-i")
+  fi
+
   # Run the command
   if [[ "$cmd" == "bash" ]] || [[ "$cmd" == "sh" ]] || [[ "$cmd" == "zsh" ]]; then
-    docker exec -it "$dc_id" "$cmd" "$@"
+    docker exec "${exec_flags[@]}" "$dc_id" "$cmd" "$@"
   else
-    docker exec "$dc_id" "$cmd" "$@"
+    docker exec "${exec_flags[@]}" "$dc_id" "$cmd" "$@"
   fi
 }
 
@@ -830,13 +1081,32 @@ cmd_doctor() {
 
   banner "work-lab doctor"
 
-  # check work-lab repo
-  header "Repository"
-  if [[ -d "$REPO_DIR/.devcontainer" ]]; then
-    status_ok "$REPO_DIR"
+  # check for updates first (most critical info)
+  header "Updates"
+  if check_for_update; then
+    status_warn "v$UPDATE_LATEST_VERSION available (current: v$VERSION)"
+    hint "work-lab upgrade"
   else
-    status_fail "not found at $REPO_DIR"
-    ((errors++))
+    status_ok "up to date (v$VERSION)"
+  fi
+
+  # check installation
+  header "Installation"
+  if [[ "$REPO_DIR" == */Cellar/work-lab/* ]]; then
+    status_ok "Homebrew"
+  elif [[ "$REPO_DIR" == "$HOME/.local/share/work-lab" ]]; then
+    status_ok "~/.local/share/work-lab"
+  else
+    status_ok "$(basename "$REPO_DIR")"
+    detail "$REPO_DIR"
+  fi
+
+  # check for wl alias/command
+  if command -v wl &>/dev/null; then
+    status_ok "wl command available"
+  else
+    status_info "wl alias not set"
+    hint "add to ~/.bashrc or ~/.zshrc: alias wl='work-lab'"
   fi
 
   # check dependencies
@@ -998,6 +1268,15 @@ cmd_doctor() {
         if [[ -n "$dc_id" ]]; then
           status_ok "project devcontainer: running (${dc_id:0:12})"
           tip "Use 'work-lab dc <cmd>' to run commands in project devcontainer"
+
+          # check if SSH tunnel credentials exist (shared filesystem approach)
+          if check_project_ssh_tunnel "$git_root"; then
+            status_ok "SSH tunnel: configured"
+            tip "Use 'prefix + S' in tmux to SSH into devcontainer"
+          else
+            status_info "SSH tunnel: not configured"
+            hint "see docs/ssh-tunneling.md for setup"
+          fi
         else
           status_warn "project devcontainer: not running"
           hint "devcontainer up --workspace-folder $git_root"
@@ -1009,15 +1288,6 @@ cmd_doctor() {
     fi
   else
     status_skip "cannot determine (not in a git repo)"
-  fi
-
-  # check for updates (uses 24-hour cache)
-  header "Updates"
-  if check_for_update; then
-    status_info "v$UPDATE_LATEST_VERSION available (current: v$VERSION)"
-    hint "work-lab upgrade"
-  else
-    status_ok "up to date (v$VERSION)"
   fi
 
   # summary
@@ -1039,7 +1309,8 @@ case "${1:-}" in
     cmd_up
     ;;
   shell)
-    cmd_shell
+    shift
+    cmd_shell "$@"
     ;;
   mux|tmux)
     cmd_mux

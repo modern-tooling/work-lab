@@ -1,0 +1,203 @@
+#!/usr/bin/env bash
+# dc-ssh
+# Copyright (c) 2026 Ryan Snodgrass. MIT License.
+# SSH into project's devcontainer from within work-lab.
+#
+# Usage: dc-ssh [command] [args...]
+#
+# Connection method: Uses shared filesystem for secure key exchange.
+# The devcontainer writes connection credentials to a shared location,
+# work-lab reads them to connect - NO Docker socket required.
+#
+# Security: Keys are ephemeral (regenerated on devcontainer start).
+# No Docker socket access needed - maintains work-lab isolation.
+
+set -Eeuo pipefail
+
+readonly SCRIPT_NAME="${0##*/}"
+readonly PROJECT_PATH="/workspaces/project"
+readonly WORKLAB_DIR="$PROJECT_PATH/.work-lab"
+
+# colors for output
+readonly CYAN='\033[38;2;80;200;220m'
+readonly GRAY='\033[38;2;140;150;160m'
+readonly YELLOW='\033[38;2;230;170;100m'
+readonly RED='\033[38;2;220;80;80m'
+readonly GREEN='\033[38;2;100;200;100m'
+readonly RESET='\033[0m'
+
+usage() {
+  cat <<EOF
+Usage: $SCRIPT_NAME [command] [args...]
+
+SSH into the project's devcontainer from within work-lab.
+
+Options:
+  --help    Show this help message
+  --check   Check if SSH tunnel is available (exit 0 if yes)
+
+Examples:
+  $SCRIPT_NAME              Interactive shell
+  $SCRIPT_NAME npm test     Run tests
+  $SCRIPT_NAME make build   Build project
+
+Setup:
+  Your devcontainer needs to publish SSH credentials to the shared mount.
+  See: docs/ssh-tunneling.md for setup instructions.
+
+  Quick setup - add to your devcontainer.json:
+    "postStartCommand": "bash /workspaces/\$(basename \$PWD)/.devcontainer/setup-work-lab-tunnel.sh || true"
+
+  Then create .devcontainer/setup-work-lab-tunnel.sh in your project.
+
+Security:
+  Uses shared filesystem for credential exchange - no Docker socket needed.
+  Keys are ephemeral (regenerated each time devcontainer starts).
+
+EOF
+}
+
+log_info() {
+  printf "${CYAN}[dc-ssh]${RESET} %s\n" "$1"
+}
+
+log_warn() {
+  printf "${YELLOW}[dc-ssh]${RESET} %s\n" "$1"
+}
+
+log_error() {
+  printf "${RED}[dc-ssh]${RESET} %s\n" "$1" >&2
+}
+
+log_hint() {
+  printf "${GRAY}  %s${RESET}\n" "$1"
+}
+
+log_ok() {
+  printf "${GREEN}[dc-ssh]${RESET} %s\n" "$1"
+}
+
+# check if tunnel credentials are available
+check_tunnel_available() {
+  [[ -f "$WORKLAB_DIR/ssh-key" ]] && \
+  [[ -f "$WORKLAB_DIR/ip" ]] && \
+  [[ -r "$WORKLAB_DIR/ssh-key" ]] && \
+  [[ -r "$WORKLAB_DIR/ip" ]]
+}
+
+# show setup instructions
+show_setup_instructions() {
+  log_error "SSH tunnel not configured"
+  echo ""
+  log_hint "Your devcontainer needs to publish SSH credentials."
+  log_hint ""
+  log_hint "Quick setup:"
+  log_hint "1. Add sshd feature to your devcontainer.json:"
+  log_hint '   "features": { "ghcr.io/devcontainers/features/sshd:1": {} }'
+  log_hint ""
+  log_hint "2. Add this postStartCommand to your devcontainer.json:"
+  log_hint '   "postStartCommand": "bash -c '\''mkdir -p .work-lab && ssh-keygen -t ed25519 -f /tmp/wl -N \"\" -q; cat /tmp/wl.pub >> ~/.ssh/authorized_keys; cp /tmp/wl .work-lab/ssh-key; chmod 600 .work-lab/ssh-key; hostname -I | awk \"{print \\$1}\" > .work-lab/ip; whoami > .work-lab/user; rm /tmp/wl*'\''\"'
+  log_hint ""
+  log_hint "3. Add .work-lab/ to your .gitignore"
+  log_hint ""
+  log_hint "See: docs/ssh-tunneling.md for detailed instructions"
+}
+
+main() {
+  # handle flags
+  case "${1:-}" in
+    --help|-h)
+      usage
+      exit 0
+      ;;
+    --check)
+      if check_tunnel_available; then
+        exit 0
+      else
+        exit 1
+      fi
+      ;;
+  esac
+
+  # check dependencies
+  if ! command -v ssh &>/dev/null; then
+    log_error "ssh command not found"
+    exit 1
+  fi
+
+  # check if project is mounted
+  if [[ ! -d "$PROJECT_PATH" ]]; then
+    log_error "No project mounted at $PROJECT_PATH"
+    log_hint "Run 'work-lab up' from your project directory first"
+    exit 1
+  fi
+
+  # check if tunnel is configured
+  if ! check_tunnel_available; then
+    show_setup_instructions
+    exit 1
+  fi
+
+  # read connection info from shared mount
+  local ssh_key="$WORKLAB_DIR/ssh-key"
+  local dc_ip dc_user
+
+  dc_ip=$(cat "$WORKLAB_DIR/ip" 2>/dev/null | tr -d '[:space:]')
+  if [[ -z "$dc_ip" ]]; then
+    log_error "Could not read devcontainer IP"
+    exit 1
+  fi
+
+  # user is optional, default to vscode
+  if [[ -f "$WORKLAB_DIR/user" ]]; then
+    dc_user=$(cat "$WORKLAB_DIR/user" 2>/dev/null | tr -d '[:space:]')
+  fi
+  dc_user="${dc_user:-vscode}"
+
+  log_info "Connecting to devcontainer..."
+  log_info "  IP: $dc_ip"
+  log_info "  User: $dc_user"
+
+  # test connectivity first
+  if ! timeout 2 bash -c "echo >/dev/tcp/$dc_ip/22" 2>/dev/null; then
+    log_error "Cannot reach devcontainer at $dc_ip:22"
+    log_hint "Is the devcontainer running with sshd enabled?"
+    exit 1
+  fi
+
+  # find workspace directory (try common patterns)
+  local project_name workspace_dir
+  project_name=$(basename "$PROJECT_PATH")
+
+  # prepare SSH options
+  local -a ssh_opts=(
+    "-i" "$ssh_key"
+    "-o" "StrictHostKeyChecking=accept-new"
+    "-o" "UserKnownHostsFile=/tmp/dc-ssh-known-hosts-$$"
+    "-o" "ConnectTimeout=5"
+    "-o" "LogLevel=ERROR"
+    "-o" "IdentitiesOnly=yes"
+  )
+
+  log_ok "Connected"
+  printf '\n'
+
+  # determine workspace - check common locations
+  local try_dirs="/workspaces/$project_name /workspace /workspaces /app"
+  local cd_cmd=""
+  for dir in $try_dirs; do
+    cd_cmd="cd $dir 2>/dev/null || cd /workspaces 2>/dev/null || true"
+    break
+  done
+
+  # connect
+  if [[ $# -gt 0 ]]; then
+    # run command
+    ssh "${ssh_opts[@]}" -t "$dc_user@$dc_ip" "$cd_cmd; $*"
+  else
+    # interactive shell
+    ssh "${ssh_opts[@]}" -t "$dc_user@$dc_ip" "$cd_cmd; exec \$SHELL -l"
+  fi
+}
+
+main "$@"

@@ -5,6 +5,14 @@
 
 A container-based lab for humans and AI coding agents to think, plan, code, and operate in an experimental space protected by guardrails.
 
+**Why it's great:**
+
+- **Works standalone** - No devcontainer? work-lab IS your devcontainer
+- **Works with devcontainers** - Run alongside any project's devcontainer via SSH tunnel
+- **Zero project changes** - Never modifies your repos
+- **Safe agent execution** - Run `claude --dangerously-skip-permissions` without the danger
+- **One command** - `wl up && wl mux` and you're in
+
 ## TL;DR
 
 | Your situation | Mode | What to do |
@@ -149,19 +157,19 @@ flowchart TB
 
 ### Sidecar mode (Work with existing Devcontainer)
 
-It is very common practice now for projects to use Devcontainers to ensure a consistent test environment during
-development. This supports both a Devcontainer and the 'work-lab' container simultaneously mounting the same
-project from your host filesystem.
+Run work-lab alongside your project's devcontainer. Both containers mount the same project - work-lab handles AI agents, the devcontainer runs your entire development environment (builds, tests, services, databases, the works).
 
 ```mermaid
 flowchart TB
     WL[work-lab container<br/>think + agent]
-    Proj[project container<br/>build + run + test]
+    Proj[project container<br/>build + test + services]
     Host[(Host filesystem<br/>~/projects/foo)]
     WL -->|bind mount| Host
     Proj -->|bind mount| Host
+    WL -.->|SSH tunnel| Proj
     style WL fill:#4a9eff,stroke:#2d7ad9,color:#fff
     style Proj fill:#10b981,stroke:#059669,color:#fff
+    linkStyle 2 stroke:#888,stroke-dasharray:5
 ```
 
 **When to use:** Project has its own devcontainer with specific build tools, services, or runtime.
@@ -171,15 +179,19 @@ flowchart TB
 | work-lab | Thinking, agents, operations |
 | Project's devcontainer | Build, run, test, services |
 
+**The magic:** From inside work-lab, run commands in the devcontainer:
+
+```bash
+wl dc npm test      # runs in devcontainer
+wl dc make build    # runs in devcontainer
+# prefix + S         # SSH into devcontainer (from tmux)
+```
+
+Zero configuration needed - just add the [sshd feature](https://github.com/devcontainers/features/tree/main/src/sshd) to your devcontainer.json and work-lab handles the rest.
+
 **Key insight:** You do NOT merge devcontainers. They run independently, sharing only the filesystem via the host.
 
-**Common patterns:**
-
-1. **Control room**: Run Claude in work-lab, execute builds in project container
-2. **Editor + agent**: Edit in work-lab, let project container handle compilation/tests
-3. **Agent shell**: Project runs locally on host, work-lab is just for agents
-
-> **Avoid:** Nesting containers, sharing Docker networks, syncing services. These lead to fragility.
+> **Avoid:** Nesting containers, sharing Docker sockets, syncing services. These lead to fragility.
 
 ---
 
