@@ -26,12 +26,10 @@
 # Format: "source:target"
 #
 # Read-only mounts (for configs you don't want agents to modify):
+# NOTE: ~/.claude is mounted by default. Add additional mounts here.
 WORK_LAB_MOUNTS_RO=(
   # Git config (user name, email, aliases)
   # "$HOME/.gitconfig:/home/vscode/.gitconfig"
-
-  # Claude config (read-only access to settings)
-  # "$HOME/.claude:/home/vscode/.claude-host"
 
   # SSH public keys only (not private keys!)
   # "$HOME/.ssh/id_ed25519.pub:/home/vscode/.ssh/id_ed25519.pub"
