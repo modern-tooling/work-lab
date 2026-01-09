@@ -38,20 +38,20 @@ It provides a consistent shell with your tools, independent of whatever project 
 
 Choose your preferred method:
 
-### One-liner (recommended)
+### Homebrew (recommended)
+
+```bash
+brew tap modern-tooling/tap
+brew install work-lab
+```
+
+### One-liner
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/modern-tooling/work-lab/main/install.sh | bash
 ```
 
 This clones to `~/.local/share/work-lab` (XDG compliant), creates config directory, and pulls the pre-built image.
-
-### Homebrew
-
-```bash
-brew tap modern-tooling/tap
-brew install work-lab
-```
 
 ### GitHub Template
 
