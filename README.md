@@ -7,7 +7,7 @@ A container-based lab for humans and AI coding agents to think, plan, code, and 
 
 **Why it's great:**
 
-- **Works standalone** - No devcontainer? work-lab IS your devcontainer
+- **Works standalone** - Want to run an AI agent within a environment with guardrails? work-lab IS your answer
 - **Works with devcontainers** - Run alongside any project's devcontainer via SSH tunnel
 - **Zero project changes** - Never modifies your repos
 - **Safe agent execution** - Run `claude --dangerously-skip-permissions` without the danger
