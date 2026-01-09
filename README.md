@@ -238,6 +238,63 @@ See `examples/` for more examples.
 
 ---
 
+## Security model
+
+work-lab provides **container isolation** for AI coding agents. This is especially valuable when running agents with elevated permissions.
+
+### The problem
+
+Running `claude --dangerously-skip-permissions` on your **host machine** gives the agent access to everything your user can access:
+
+- SSH keys (`~/.ssh`)
+- Cloud credentials (`~/.aws`, `~/.config/gcloud`)
+- Browser data, cookies
+- All your documents
+- System files
+
+### The solution
+
+Running the same command **inside work-lab** limits the blast radius to only what's mounted:
+
+```mermaid
+flowchart TB
+    subgraph Host["Host Machine (protected)"]
+        SSH["~/.ssh"]
+        AWS["~/.aws"]
+        Docs["~/Documents"]
+    end
+    subgraph Container["work-lab container"]
+        Agent["claude --dangerously-skip-permissions"]
+        Projects["/workspaces/projects"]
+    end
+    HostProjects["~/projects"]
+    Agent --> Projects
+    Projects -.->|bind mount| HostProjects
+    style Host fill:#fee2e2,stroke:#dc2626
+    style Container fill:#dcfce7,stroke:#16a34a
+    style Agent fill:#4a9eff,stroke:#2d7ad9,color:#fff
+```
+
+| Resource | On host | In work-lab |
+|----------|---------|-------------|
+| SSH keys (`~/.ssh`) | Accessible | Not mounted |
+| Cloud credentials | Accessible | Not mounted |
+| Browser data | Accessible | Not mounted |
+| System files | Accessible | Container's own |
+| Your projects | Accessible | Only `/workspaces/projects` |
+
+**Result:** Agent autonomy (no permission prompts) with bounded risk (can only touch mounted project files).
+
+### Supply chain considerations
+
+The one-liner install (`curl | bash`) and `:latest` Docker tags carry inherent supply chain risks. For higher security:
+
+1. **Review before running:** Download `install.sh`, inspect it, then execute
+2. **Pin image versions:** Use specific SHA digests instead of `:latest`
+3. **Use Homebrew:** `brew install work-lab` provides formula review and checksums
+
+---
+
 ## Design principles
 
 1. **Boring is good.** No clever abstractions. No magic.
