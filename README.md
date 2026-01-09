@@ -1,5 +1,5 @@
 <!-- doc-audience: human -->
-# work-lab (Embracing Development in the Post-2025 Future)
+# work-lab (Embracing Post-2025 Futuristic Development)
 
 [![docs: ai-human-docs](https://raw.githubusercontent.com/modern-tooling/ai-human-docs/main/badges/ai-human-docs.svg)](https://github.com/modern-tooling/ai-human-docs)
 
@@ -135,7 +135,6 @@ flowchart TB
     Host[(Host filesystem<br/>~/projects/foo)]
     WL -->|bind mount| Host
     style WL fill:#4a9eff,stroke:#2d7ad9,color:#fff
-    style Host fill:#f5f5f5,stroke:#999
 ```
 
 **When to use:** Project has no devcontainer, or you don't need its build environment.
@@ -159,7 +158,6 @@ flowchart TB
     Proj -->|bind mount| Host
     style WL fill:#4a9eff,stroke:#2d7ad9,color:#fff
     style Proj fill:#10b981,stroke:#059669,color:#fff
-    style Host fill:#f5f5f5,stroke:#999
 ```
 
 **When to use:** Project has its own devcontainer with specific build tools, services, or runtime.
@@ -181,16 +179,18 @@ flowchart TB
 
 ---
 
-## Installed tools
+## Installed tools inside Work Lab
+
+You can always update your `~/.config/work-lab/post-create.sh` to install additional tools into the base `work-lab` environment:
 
 | Tool | Purpose |
 |------|---------|
-| tmux | Persistent terminal sessions |
 | git, curl, jq, ripgrep, fzf | Standard utilities |
 | Node.js 22 LTS | JavaScript runtime |
-| [Claude CLI](https://github.com/anthropics/claude-code) | AI coding agent |
-| [Beads](https://github.com/steveyegge/beads) | Task management for AI coding agents |
-| [Gastown](https://github.com/steveyegge/gastown) | AI coding agent orchestrator |
+| tmux | Persistent terminal sessions (useful for coding orchestrator) |
+| [Claude CLI](https://github.com/anthropics/claude-code) | AI coding agent (optional to use)|
+| [Beads](https://github.com/steveyegge/beads) | Task management for AI coding agents (optional to use) |
+| [Gastown](https://github.com/steveyegge/gastown) | AI coding agent orchestrator (optional to use) |
 
 > **Note:** work-lab is **not** specifically for Gastown — it's a general-purpose environment for any AI coding agent. Gastown happens to be one of the best AI coding agent orchestrators as of January 2026, so it's included by default.
 
@@ -303,4 +303,4 @@ The one-liner install (`curl | bash`) and `:latest` Docker tags carry inherent s
 
 ## Thanks to Our Major Contributors
 
-- [Ryan Snodgrass](https://github.com/rsnodgrass)
+- [Ryan Snodgrass](https://github.com/rsnodgrass) - [Buy a Coffee](https://buymeacoffee.com/DYks67r)
