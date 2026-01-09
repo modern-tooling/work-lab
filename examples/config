@@ -5,6 +5,8 @@
 #
 # This file is sourced by work-lab before running commands.
 # Set environment variables to customize behavior.
+#
+# shellcheck disable=SC2034  # Variables used when sourced by work-lab
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Projects directory

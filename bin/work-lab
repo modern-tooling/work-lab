@@ -42,37 +42,56 @@ export WORK_LAB_IMAGE
 # Build mount flags for devcontainer up
 build_mount_flags() {
   local flags=()
-  local mount_spec source target
+  local mount_spec src_path tgt_path
 
-  # Add read-only mounts
-  for mount_spec in "${WORK_LAB_MOUNTS_RO[@]}"; do
-    source="${mount_spec%%:*}"
-    target="${mount_spec#*:}"
-    # Expand ~ and $HOME
-    source="${source/#\~/$HOME}"
-    source="${source//\$HOME/$HOME}"
-    if [[ -e "$source" ]]; then
-      flags+=("--mount" "type=bind,source=$source,target=$target,readonly")
-    else
-      echo "  [warn] skipping mount (source not found): $source" >&2
-    fi
-  done
+  # Add read-only mounts (guard against empty array for Bash < 4.4)
+  if (( ${#WORK_LAB_MOUNTS_RO[@]} > 0 )); then
+    for mount_spec in "${WORK_LAB_MOUNTS_RO[@]}"; do
+      # Validate format: must contain colon separator
+      if [[ "$mount_spec" != *:* ]]; then
+        echo "  [error] invalid mount spec (missing colon): $mount_spec" >&2
+        continue
+      fi
+      src_path="${mount_spec%%:*}"
+      tgt_path="${mount_spec#*:}"
+      # Expand ~ and $HOME
+      src_path="${src_path/#\~/$HOME}"
+      src_path="${src_path//\$HOME/$HOME}"
+      if [[ -e "$src_path" ]]; then
+        flags+=("--mount" "type=bind,source=$src_path,target=$tgt_path,readonly")
+        echo "  [ok] $src_path -> $tgt_path (ro)"
+      else
+        echo "  [warn] skipping (source not found): $src_path" >&2
+      fi
+    done
+  fi
 
-  # Add read-write mounts
-  for mount_spec in "${WORK_LAB_MOUNTS_RW[@]}"; do
-    source="${mount_spec%%:*}"
-    target="${mount_spec#*:}"
-    # Expand ~ and $HOME
-    source="${source/#\~/$HOME}"
-    source="${source//\$HOME/$HOME}"
-    if [[ -e "$source" ]]; then
-      flags+=("--mount" "type=bind,source=$source,target=$target")
-    else
-      echo "  [warn] skipping mount (source not found): $source" >&2
-    fi
-  done
+  # Add read-write mounts (guard against empty array for Bash < 4.4)
+  if (( ${#WORK_LAB_MOUNTS_RW[@]} > 0 )); then
+    for mount_spec in "${WORK_LAB_MOUNTS_RW[@]}"; do
+      # Validate format: must contain colon separator
+      if [[ "$mount_spec" != *:* ]]; then
+        echo "  [error] invalid mount spec (missing colon): $mount_spec" >&2
+        continue
+      fi
+      src_path="${mount_spec%%:*}"
+      tgt_path="${mount_spec#*:}"
+      # Expand ~ and $HOME
+      src_path="${src_path/#\~/$HOME}"
+      src_path="${src_path//\$HOME/$HOME}"
+      if [[ -e "$src_path" ]]; then
+        flags+=("--mount" "type=bind,source=$src_path,target=$tgt_path")
+        echo "  [ok] $src_path -> $tgt_path (rw)"
+      else
+        echo "  [warn] skipping (source not found): $src_path" >&2
+      fi
+    done
+  fi
 
-  printf '%s\n' "${flags[@]}"
+  # Output flags (guard against empty array)
+  if (( ${#flags[@]} > 0 )); then
+    printf '%s\n' "${flags[@]}"
+  fi
 }
 
 usage() {
@@ -159,7 +178,8 @@ cmd_stop() {
 }
 
 cmd_doctor() {
-  local container_id config_dir project_count
+  local container_id config_dir project_count errors=0
+  local mount_spec src_path tgt_path
 
   echo ""
   echo "work-lab doctor"
@@ -167,39 +187,54 @@ cmd_doctor() {
   echo ""
 
   # check work-lab repo
-  echo "work-lab repo:"
+  echo "Repository:"
   if [[ -d "$REPO_DIR/.devcontainer" ]]; then
     echo "  [ok] $REPO_DIR"
   else
     echo "  [error] not found at $REPO_DIR"
+    ((errors++))
   fi
   echo ""
 
   # check dependencies
   echo "Dependencies:"
   if command -v docker &>/dev/null; then
-    echo "  [ok] docker: $(docker --version | head -n 1)"
+    echo "  [ok] docker: $(docker --version 2>/dev/null | head -n 1 || echo 'installed')"
+    # Check if docker daemon is running
+    if docker info &>/dev/null; then
+      echo "  [ok] docker daemon: running"
+    else
+      echo "  [error] docker daemon: not running (start Docker Desktop or dockerd)"
+      ((errors++))
+    fi
   else
-    echo "  [error] docker: not found"
+    echo "  [error] docker: not found (install from https://docs.docker.com/get-docker/)"
+    ((errors++))
   fi
   if command -v devcontainer &>/dev/null; then
     echo "  [ok] devcontainer CLI: $(devcontainer --version 2>/dev/null || echo 'installed')"
   else
-    echo "  [warn] devcontainer CLI: not found (install with: npm install -g @devcontainers/cli)"
+    echo "  [error] devcontainer CLI: not found"
+    echo "         install with: npm install -g @devcontainers/cli"
+    ((errors++))
   fi
   echo ""
 
   # check container status
   echo "Container:"
-  container_id=$(find_container)
-  if [[ -n "$container_id" ]]; then
-    echo "  [ok] running (id: ${container_id:0:12})"
+  if command -v docker &>/dev/null && docker info &>/dev/null; then
+    container_id=$(find_container)
+    if [[ -n "$container_id" ]]; then
+      echo "  [ok] running (id: ${container_id:0:12})"
+    else
+      echo "  [info] not running (start with: work-lab up)"
+    fi
   else
-    echo "  [info] not running"
+    echo "  [skip] cannot check (docker not available)"
   fi
   echo ""
 
-  # show configuration
+  # show and validate configuration
   echo "Configuration:"
   config_dir="$HOME/.config/work-lab"
   if [[ -f "$config_dir/config" ]]; then
@@ -209,61 +244,128 @@ cmd_doctor() {
   fi
   echo "  WORK_LAB_PROJECTS_DIR=$WORK_LAB_PROJECTS_DIR"
   echo "  WORK_LAB_IMAGE=$WORK_LAB_IMAGE"
-  if [[ ${#WORK_LAB_MOUNTS_RO[@]} -gt 0 ]]; then
-    echo "  WORK_LAB_MOUNTS_RO: ${#WORK_LAB_MOUNTS_RO[@]} configured"
-    for m in "${WORK_LAB_MOUNTS_RO[@]}"; do
-      echo "    - $m (ro)"
-    done
+  echo ""
+
+  # check projects directory
+  echo "Projects directory:"
+  if [[ -d "$WORK_LAB_PROJECTS_DIR" ]]; then
+    project_count=$(find "$WORK_LAB_PROJECTS_DIR" -maxdepth 1 -type d 2>/dev/null | wc -l | tr -d ' ')
+    echo "  [ok] $WORK_LAB_PROJECTS_DIR ($((project_count - 1)) subdirectories)"
+  else
+    echo "  [error] $WORK_LAB_PROJECTS_DIR not found"
+    echo "         create it: mkdir -p \"$WORK_LAB_PROJECTS_DIR\""
+    echo "         or set WORK_LAB_PROJECTS_DIR in config"
+    ((errors++))
   fi
-  if [[ ${#WORK_LAB_MOUNTS_RW[@]} -gt 0 ]]; then
-    echo "  WORK_LAB_MOUNTS_RW: ${#WORK_LAB_MOUNTS_RW[@]} configured"
-    for m in "${WORK_LAB_MOUNTS_RW[@]}"; do
-      echo "    - $m (rw)"
-    done
+  echo ""
+
+  # validate configured mounts
+  echo "Configured mounts:"
+  if (( ${#WORK_LAB_MOUNTS_RO[@]} == 0 && ${#WORK_LAB_MOUNTS_RW[@]} == 0 )); then
+    echo "  [info] none configured (optional)"
+  else
+    # Check read-only mounts
+    if (( ${#WORK_LAB_MOUNTS_RO[@]} > 0 )); then
+      for mount_spec in "${WORK_LAB_MOUNTS_RO[@]}"; do
+        if [[ "$mount_spec" != *:* ]]; then
+          echo "  [error] invalid format (missing colon): $mount_spec"
+          ((errors++))
+          continue
+        fi
+        src_path="${mount_spec%%:*}"
+        tgt_path="${mount_spec#*:}"
+        # Expand ~ and $HOME
+        src_path="${src_path/#\~/$HOME}"
+        src_path="${src_path//\$HOME/$HOME}"
+        if [[ -e "$src_path" ]]; then
+          if [[ -r "$src_path" ]]; then
+            echo "  [ok] $src_path -> $tgt_path (ro)"
+          else
+            echo "  [error] $src_path -> $tgt_path (ro) - not readable"
+            ((errors++))
+          fi
+        else
+          echo "  [warn] $src_path -> $tgt_path (ro) - source not found"
+        fi
+      done
+    fi
+    # Check read-write mounts
+    if (( ${#WORK_LAB_MOUNTS_RW[@]} > 0 )); then
+      for mount_spec in "${WORK_LAB_MOUNTS_RW[@]}"; do
+        if [[ "$mount_spec" != *:* ]]; then
+          echo "  [error] invalid format (missing colon): $mount_spec"
+          ((errors++))
+          continue
+        fi
+        src_path="${mount_spec%%:*}"
+        tgt_path="${mount_spec#*:}"
+        # Expand ~ and $HOME
+        src_path="${src_path/#\~/$HOME}"
+        src_path="${src_path//\$HOME/$HOME}"
+        if [[ -e "$src_path" ]]; then
+          if [[ -r "$src_path" && -w "$src_path" ]]; then
+            echo "  [ok] $src_path -> $tgt_path (rw)"
+          else
+            echo "  [error] $src_path -> $tgt_path (rw) - not readable/writable"
+            ((errors++))
+          fi
+        else
+          echo "  [warn] $src_path -> $tgt_path (rw) - source not found"
+        fi
+      done
+    fi
   fi
   echo ""
 
   # check user hooks
-  echo "User hooks (~/.config/work-lab/):"
+  echo "Lifecycle hooks:"
   if [[ -d "$config_dir" ]]; then
     if [[ -f "$config_dir/post-create.sh" ]]; then
-      echo "  [ok] post-create.sh"
+      if [[ -x "$config_dir/post-create.sh" ]] || head -1 "$config_dir/post-create.sh" | grep -q '^#!'; then
+        echo "  [ok] post-create.sh"
+      else
+        echo "  [warn] post-create.sh (missing shebang or not executable)"
+      fi
     else
       echo "  [info] post-create.sh (not found)"
     fi
     if [[ -f "$config_dir/post-start.sh" ]]; then
-      echo "  [ok] post-start.sh"
+      if [[ -x "$config_dir/post-start.sh" ]] || head -1 "$config_dir/post-start.sh" | grep -q '^#!'; then
+        echo "  [ok] post-start.sh"
+      else
+        echo "  [warn] post-start.sh (missing shebang or not executable)"
+      fi
     else
       echo "  [info] post-start.sh (not found)"
     fi
   else
-    echo "  [info] directory not found (optional)"
+    echo "  [info] ~/.config/work-lab/ not found (optional)"
   fi
   echo ""
 
-  # check projects mount source
-  echo "Projects directory:"
-  if [[ -d "$WORK_LAB_PROJECTS_DIR" ]]; then
-    project_count=$(find "$WORK_LAB_PROJECTS_DIR" -maxdepth 1 -type d 2>/dev/null | wc -l | tr -d ' ')
-    echo "  [ok] $WORK_LAB_PROJECTS_DIR ($((project_count - 1)) items)"
-  else
-    echo "  [warn] $WORK_LAB_PROJECTS_DIR not found"
-    echo "         create it or set WORK_LAB_PROJECTS_DIR in config"
-  fi
-  echo ""
-
-  # check if current directory has a devcontainer
-  echo "Current directory ($PWD):"
+  # check current directory context
+  echo "Current directory:"
+  echo "  $PWD"
   if [[ -d ".devcontainer" ]] || [[ -f ".devcontainer.json" ]]; then
     if [[ "$PWD" == "$REPO_DIR" ]]; then
       echo "  [info] this is the work-lab repo"
     else
-      echo "  [info] has devcontainer -> Sidecar mode"
+      echo "  [info] has devcontainer -> Sidecar mode recommended"
     fi
   else
     echo "  [info] no devcontainer -> Standalone mode"
   fi
   echo ""
+
+  # summary
+  echo "─────────────────────────────"
+  if (( errors > 0 )); then
+    echo "Found $errors error(s). Fix them before running 'work-lab up'."
+    return 1
+  else
+    echo "All checks passed. Ready to run 'work-lab up'."
+    return 0
+  fi
 }
 
 # Main
