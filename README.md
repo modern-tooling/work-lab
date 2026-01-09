@@ -104,7 +104,13 @@ work-lab doctor   # Check environment and configuration
 work-lab version  # Show version information
 ```
 
-**Tip:** Use the short alias `wl` (installed automatically):
+**Tip:** Add a short alias to your shell profile (`~/.bashrc` or `~/.zshrc`):
+
+```bash
+alias wl='work-lab'
+```
+
+Then use:
 
 ```bash
 wl up      # Same as: work-lab up

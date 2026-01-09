@@ -82,33 +82,15 @@ fi
 ln -s "$INSTALL_DIR/bin/work-lab" "$local_bin/work-lab"
 success "Symlinked to $local_bin/work-lab"
 
-# Short alias: wl (only if not taken by another tool)
-if [[ -L "$local_bin/wl" ]]; then
-  # Check if it already points to work-lab
-  existing_target=$(readlink "$local_bin/wl")
-  if [[ "$existing_target" == *"work-lab"* ]]; then
-    rm -f -- "$local_bin/wl"
-    ln -s "$INSTALL_DIR/bin/work-lab" "$local_bin/wl"
-    success "Updated symlink $local_bin/wl"
-  else
-    info "Skipping 'wl' alias: $local_bin/wl already exists (points to $existing_target)"
-    info "To use 'wl' for work-lab, add to your shell profile: alias wl='work-lab'"
-  fi
-elif [[ -e "$local_bin/wl" ]]; then
-  info "Skipping 'wl' alias: $local_bin/wl already exists (not a symlink)"
-  info "To use 'wl' for work-lab, add to your shell profile: alias wl='work-lab'"
-else
-  ln -s "$INSTALL_DIR/bin/work-lab" "$local_bin/wl"
-  success "Symlinked to $local_bin/wl (short alias)"
-fi
-
 # Check if ~/.local/bin is in PATH
 if [[ ":$PATH:" != *":$local_bin:"* ]]; then
   info "$local_bin is not in your PATH"
-  info "Add this to your shell profile (~/.bashrc or ~/.zshrc):"
+  info "Add to your shell profile (~/.bashrc or ~/.zshrc):"
   info "  export PATH=\"\$PATH:$local_bin\""
+  info "  alias wl='work-lab'  # optional short alias"
 else
   success "$local_bin is already in PATH"
+  info "Optional: add to your shell profile: alias wl='work-lab'"
 fi
 
 # Check if devcontainer CLI is installed
@@ -126,8 +108,8 @@ echo "========================================"
 echo ""
 echo "Quick start:"
 echo ""
-echo "  wl version  # Verify installation (or: work-lab version)"
-echo "  wl doctor   # Check your environment"
-echo "  wl up       # Start the container"
-echo "  wl tmux     # Attach to tmux session"
+echo "  work-lab version  # Verify installation"
+echo "  work-lab doctor   # Check your environment"
+echo "  work-lab up       # Start the container"
+echo "  work-lab tmux     # Attach to tmux session"
 echo ""
