@@ -6,7 +6,7 @@
 
 set -Eeuo pipefail
 
-VERSION="0.1.5"
+VERSION="0.2.0"
 
 # shellcheck disable=SC2155
 readonly SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
@@ -90,7 +90,7 @@ get_project_name() {
 }
 
 # Build mount flags for devcontainer up
-# Note: devcontainer CLI mount format: type=bind,source=<src>,target=<tgt>
+# Note: devcontainer CLI requires --mount=VALUE format (with equals sign)
 # Read-only not directly supported by devcontainer CLI, but we track intent
 build_mount_flags() {
   local flags=()
@@ -111,7 +111,7 @@ build_mount_flags() {
       src_path="${src_path/#\~/$HOME}"
       src_path="${src_path//\$HOME/$HOME}"
       if [[ -e "$src_path" ]]; then
-        flags+=("--mount" "type=bind,source=$src_path,target=$tgt_path")
+        flags+=("--mount=type=bind,source=$src_path,target=$tgt_path")
         status_ok "$src_path ${ICON_ARROW} $tgt_path (ro)" >&2
       else
         status_warn "skipping (not found): $src_path" >&2
@@ -133,7 +133,7 @@ build_mount_flags() {
       src_path="${src_path/#\~/$HOME}"
       src_path="${src_path//\$HOME/$HOME}"
       if [[ -e "$src_path" ]]; then
-        flags+=("--mount" "type=bind,source=$src_path,target=$tgt_path")
+        flags+=("--mount=type=bind,source=$src_path,target=$tgt_path")
         status_ok "$src_path ${ICON_ARROW} $tgt_path (rw)" >&2
       else
         status_warn "skipping (not found): $src_path" >&2
@@ -399,25 +399,40 @@ cmd_ps() {
       fi
       printf "  └─ ${C_DIM}devcontainer${C_RESET}  ${C_DIM}%s${C_RESET}  ${C_PASS}●${C_RESET}  ${C_DIM}%s${C_RESET}\n" "${dc_id:0:12}" "${container_name[$dc_id]}"
     elif (( wl_count > 0 )); then
-      # Only work-lab(s), no devcontainer
+      # Only work-lab(s), no devcontainer running
+      local has_devcontainer=0
+      if [[ -d "$project/.devcontainer" ]] || [[ -f "$project/.devcontainer.json" ]]; then
+        has_devcontainer=1
+      fi
       if (( wl_count == 1 )); then
         local wl_id="${wl_array[0]}"
-        printf "  └─ ${C_COMMAND}work-lab${C_RESET}      ${C_DIM}%s${C_RESET}  ${C_PASS}●${C_RESET}  ${C_DIM}%s (standalone)${C_RESET}\n" "${wl_id:0:12}" "${container_name[$wl_id]}"
+        if (( has_devcontainer )); then
+          # Show work-lab and stopped devcontainer as separate tree entries
+          printf "  ├─ ${C_COMMAND}work-lab${C_RESET}      ${C_DIM}%s${C_RESET}  ${C_PASS}●${C_RESET}  ${C_DIM}%s${C_RESET}\n" "${wl_id:0:12}" "${container_name[$wl_id]}"
+          printf "  └─ ${C_DIM}devcontainer${C_RESET}  ${C_DIM}────────────${C_RESET}  ${C_WARN}○${C_RESET}  ${C_WARN}stopped${C_RESET}\n"
+        else
+          # Standalone mode - no devcontainer available
+          printf "  └─ ${C_COMMAND}work-lab${C_RESET}      ${C_DIM}%s${C_RESET}  ${C_PASS}●${C_RESET}  ${C_DIM}%s${C_RESET} ${C_DIM}(standalone)${C_RESET}\n" "${wl_id:0:12}" "${container_name[$wl_id]}"
+        fi
       else
-        # Multiple standalone work-labs
-        local session_annotation
-        session_annotation=$(printf "${C_ACCENT}(%d sessions)${C_RESET}" "$wl_count")
-        printf "  └─ ${C_COMMAND}work-lab${C_RESET}      %b ${C_DIM}(standalone)${C_RESET}\n" "$session_annotation"
+        # Multiple work-labs
         local i=0
         for wl_id in "${wl_array[@]}"; do
           ((i++))
-          local connector=" "
-          printf "  %s   └─ ${C_DIM}%s${C_RESET}  ${C_PASS}●${C_RESET}  ${C_DIM}%s${C_RESET}\n" "$connector" "${wl_id:0:12}" "${container_name[$wl_id]}"
+          local connector="├"
+          if (( i == wl_count )) && (( ! has_devcontainer )); then
+            connector="└"
+          fi
+          printf "  %s─ ${C_COMMAND}work-lab${C_RESET}      ${C_DIM}%s${C_RESET}  ${C_PASS}●${C_RESET}  ${C_DIM}%s${C_RESET}\n" "$connector" "${wl_id:0:12}" "${container_name[$wl_id]}"
         done
+        if (( has_devcontainer )); then
+          printf "  └─ ${C_DIM}devcontainer${C_RESET}  ${C_DIM}────────────${C_RESET}  ${C_WARN}○${C_RESET}  ${C_WARN}stopped${C_RESET}\n"
+        fi
       fi
     elif [[ -n "$dc_id" ]]; then
-      # Only devcontainer (no work-lab) - show warning indicator
-      printf "  └─ ${C_DIM}devcontainer${C_RESET}  ${C_DIM}%s${C_RESET}  ${C_WARN}○${C_RESET}  ${C_DIM}%s${C_RESET}  ${C_WARN}no work-lab${C_RESET}\n" "${dc_id:0:12}" "${container_name[$dc_id]}"
+      # Only devcontainer (no work-lab) - show work-lab as stopped, devcontainer as running
+      printf "  ├─ ${C_DIM}work-lab${C_RESET}      ${C_DIM}────────────${C_RESET}  ${C_WARN}○${C_RESET}  ${C_WARN}stopped${C_RESET}\n"
+      printf "  └─ ${C_DIM}devcontainer${C_RESET}  ${C_DIM}%s${C_RESET}  ${C_PASS}●${C_RESET}  ${C_DIM}%s${C_RESET}\n" "${dc_id:0:12}" "${container_name[$dc_id]}"
     fi
   done
 
@@ -427,6 +442,9 @@ cmd_ps() {
 
 cmd_up() {
   require_host
+
+  # Ensure config directory exists (required for devcontainer mount)
+  mkdir -p "$HOME/.config/work-lab"
 
   if ! command -v devcontainer &> /dev/null; then
     status_fail "devcontainer CLI not found"
@@ -452,7 +470,7 @@ cmd_up() {
   local mount_flags=()
 
   # Add project mount (the current git repo)
-  mount_flags+=("--mount" "type=bind,source=$project_root,target=/workspaces/project")
+  mount_flags+=("--mount=type=bind,source=$project_root,target=/workspaces/project")
   printf "  ${C_LABEL}mount${C_RESET}    %s -> /workspaces/project\n" "$project_root"
 
   # Add additional mounts from config

@@ -46,13 +46,26 @@ RUN curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \
     && rm -rf /var/lib/apt/lists/*
 
 # Install global npm packages
-# - gastown: steveyegge's tool
 # - beads: task management
 # - @anthropic-ai/claude-code: official claude CLI
 RUN npm install -g \
-    gastown \
     beads \
     @anthropic-ai/claude-code
+
+# Install Go (required for gastown)
+# gastown requires Go >= 1.24.2
+RUN curl -fsSL https://go.dev/dl/go1.24.11.linux-amd64.tar.gz | tar -C /usr/local -xzf - \
+    && ln -s /usr/local/go/bin/go /usr/local/bin/go \
+    && ln -s /usr/local/go/bin/gofmt /usr/local/bin/gofmt
+
+# Install gastown (AI coding agent orchestrator)
+# Requires Go 1.24+, beads, and tmux (all installed above)
+ENV GOPATH=/home/worklab/go
+ENV PATH="${PATH}:/home/worklab/go/bin"
+RUN mkdir -p /home/worklab/go && chown worklab:worklab /home/worklab/go
+USER worklab
+RUN go install github.com/steveyegge/gastown/cmd/gt@latest
+USER root
 
 # Copy worklab user configs
 COPY home/ /home/worklab/

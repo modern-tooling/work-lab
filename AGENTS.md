@@ -20,18 +20,24 @@ References:
 ## Versioning
 
 - Version is defined in `bin/work-lab` as `VERSION="x.y.z"`
-- Follow [Semantic Versioning](https://semver.org/)
+- Uses beads-style versioning: `0.<release>.0`
+  - Middle number increments for each release (0.1.0 → 0.2.0 → 0.3.0)
+  - Last number reserved for patches on a released version (0.2.0 → 0.2.1)
+  - First number reserved for major/stable releases
 - Keep `CHANGELOG.md` up to date with each release
 
 ## Releases
 
-When releasing a new version:
+**IMPORTANT: Agents MUST NOT release without explicit human confirmation.** Always ask the user before creating tags, pushing releases, or updating the Homebrew tap.
+
+When releasing a new version (after human approval):
 
 1. Update `VERSION` in `bin/work-lab`
 2. Update `CHANGELOG.md` with release notes
-3. Create git tag: `git tag -a v0.1.0 -m "Release v0.1.0"`
-4. Push tag: `git push origin v0.1.0`
+3. Create git tag: `git tag -a v0.2.0 -m "Release v0.2.0"`
+4. Push tag: `git push origin v0.2.0`
 5. GitHub Actions will build and push Docker image to GHCR
+6. **MUST** update the Homebrew tap at [modern-tooling/homebrew-tap](https://github.com/modern-tooling/homebrew-tap) with the new version
 
 **Release frequency:** One version per day maximum. If multiple features land same day, combine into single release.
 

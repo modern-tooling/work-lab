@@ -1,7 +1,7 @@
 # work-lab bash config
 
-# Add work-lab bin to PATH
-export PATH="$HOME/bin:$PATH"
+# Add work-lab bin and Go bin to PATH
+export PATH="$HOME/bin:$HOME/go/bin:$PATH"
 
 # Custom prompt: [work-lab] in cyan, path in gray, ❯ in accent blue
 PS1='\[\e[38;2;80;200;220m\][work-lab]\[\e[0m\] \[\e[38;2;140;150;160m\]\w\[\e[0m\] \[\e[38;2;130;180;210m\]❯\[\e[0m\] '

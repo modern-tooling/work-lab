@@ -37,6 +37,8 @@ It provides a consistent safe environment for engaging with your tools and AI co
 
 ## Prerequisites
 
+**Platform:** Linux and macOS only. Windows is not currently supported (contributions welcome).
+
 | Requirement | Purpose | Install |
 |-------------|---------|---------|
 | [Docker](https://docs.docker.com/get-docker/) | Container runtime | `brew install --cask docker` (or alternatives) |
@@ -93,7 +95,7 @@ Inside the container:
 
 ```bash
 cd /workspaces/project       # Your project is mounted here
-claude                       # or gastown, opencode, aider, etc.
+claude                       # or gt (gastown), opencode, aider, etc.
 ```
 
 ### Helper commands
@@ -189,10 +191,11 @@ You can always update your `~/.config/work-lab/post-create.sh` to install additi
 |------|---------|
 | git, curl, jq, ripgrep, fzf | Standard utilities |
 | Node.js 22 LTS | JavaScript runtime |
+| Go 1.24 | Go runtime (for gastown) |
 | tmux | Persistent terminal sessions (useful for coding orchestrator) |
 | [Claude CLI](https://github.com/anthropics/claude-code) | AI coding agent (optional to use)|
 | [Beads](https://github.com/steveyegge/beads) | Task management for AI coding agents (optional to use) |
-| [Gastown](https://github.com/steveyegge/gastown) | AI coding agent orchestrator (optional to use) |
+| [Gastown](https://github.com/steveyegge/gastown) (`gt`) | AI coding agent orchestrator (optional to use) |
 
 > **Note:** work-lab is **not** specifically for Gastown — it's a general-purpose environment for any AI coding agent. Gastown happens to be one of the best AI coding agent orchestrators as of January 2026, so it's included by default.
 
@@ -203,7 +206,7 @@ You can always update your `~/.config/work-lab/post-create.sh` to install additi
 ```bash
 work-lab mux                 # Attach to work-lab
 cd /workspaces/project       # Your project is already here
-gastown                      # Start Gastown orchestrator
+gt                           # Start Gastown orchestrator
 ```
 
 ---
