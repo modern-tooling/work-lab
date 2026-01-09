@@ -94,6 +94,7 @@ C_SUCCESS="$C_PASS"       # success messages
 C_ERROR="$C_FAIL"         # error messages
 C_WARNING="$C_WARN"       # warning messages
 C_MUTED="$C_DIM"          # muted/secondary text
+C_TIP="$C_ACCENT"         # tips and suggestions
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Styled output functions
@@ -158,4 +159,9 @@ detail() {
 # Hint/suggestion
 hint() {
   printf "  ${C_DIM}${ICON_ARROW}${C_RESET} ${C_ACCENT}%s${C_RESET}\n" "$*"
+}
+
+# Tip (for advanced suggestions) - uses brackets to stand out
+tip() {
+  printf "  ${C_TIP}[tip]${C_RESET} %s\n" "$*"
 }

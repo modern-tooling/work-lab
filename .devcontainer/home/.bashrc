@@ -7,6 +7,7 @@ PS1='\[\e[38;2;80;200;220m\][work-lab]\[\e[0m\] \[\e[38;2;140;150;160m\]\w\[\e[0
 alias ll='ls -la'
 alias la='ls -A'
 alias l='ls -CF'
+alias wl='work-lab'
 
 # Source user overrides if present
 [[ -f ~/.config/work-lab/bashrc.local ]] && source ~/.config/work-lab/bashrc.local

@@ -58,6 +58,24 @@ fi
 export WORK_LAB_IMAGE
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Container detection
+# ─────────────────────────────────────────────────────────────────────────────
+# Check if running inside work-lab container
+is_inside_container() {
+  [[ -f /workspaces/work-lab/.devcontainer/devcontainer.json ]] || \
+  [[ "${WORK_LAB_CONTAINER:-}" == "1" ]]
+}
+
+# Require running outside container (for host-only commands)
+require_host() {
+  if is_inside_container; then
+    status_fail "This command must be run on the host, not inside work-lab"
+    hint "exit the container and run from your host terminal"
+    fail_exit
+  fi
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Project detection
 # ─────────────────────────────────────────────────────────────────────────────
 # Find the git root of the current directory (or empty if not in a git repo)
@@ -135,15 +153,16 @@ usage() {
   echo "  work-lab <command>"
   echo ""
   print_accent "Commands:"
-  printf "  ${C_COMMAND}%-10s${C_RESET} %s\n" "up" "Start work-lab for the current git project"
-  printf "  ${C_COMMAND}%-10s${C_RESET} %s\n" "shell" "Attach an interactive shell"
-  printf "  ${C_COMMAND}%-10s${C_RESET} %s\n" "mux" "Attach to multiplexer session (tmux or zellij)"
-  printf "  ${C_COMMAND}%-10s${C_RESET} %s\n" "stop" "Stop the container"
-  printf "  ${C_COMMAND}%-10s${C_RESET} %s\n" "ps" "List running work-lab containers"
-  printf "  ${C_COMMAND}%-10s${C_RESET} %s\n" "doctor" "Check environment and configuration"
-  printf "  ${C_COMMAND}%-10s${C_RESET} %s\n" "version" "Show version information"
-  printf "  ${C_COMMAND}%-14s${C_RESET} %s\n" "release-notes" "Show release notes for current version"
-  printf "  ${C_COMMAND}%-10s${C_RESET} %s\n" "help" "Show this message"
+  printf "  ${C_COMMAND}%-14s${C_RESET} %s\n" "up" "Start work-lab for the current git project"
+  printf "  ${C_COMMAND}%-14s${C_RESET} %s\n" "shell" "Attach an interactive shell"
+  printf "  ${C_COMMAND}%-14s${C_RESET} %s\n" "mux" "Attach to multiplexer session (tmux or zellij)"
+  printf "  ${C_COMMAND}%-14s${C_RESET} %s\n" "stop" "Stop the container"
+  printf "  ${C_COMMAND}%-14s${C_RESET} %s\n" "ps" "List running work-lab containers"
+  printf "  ${C_COMMAND}%-14s${C_RESET} %s\n" "dc <cmd>" "Run command in project's devcontainer"
+  printf "  ${C_COMMAND}%-14s${C_RESET} %s\n" "doctor" "Check environment and configuration"
+  printf "  ${C_COMMAND}%-14s${C_RESET} %s\n" "version" "Show version information"
+  printf "  ${C_COMMAND}%-14s${C_RESET} %s\n" "release-notes" "Show release notes"
+  printf "  ${C_COMMAND}%-14s${C_RESET} %s\n" "help" "Show this message"
   echo ""
   print_dim "Run 'work-lab up' from any git repository to start."
   print_dim "Your project will be mounted at /workspaces/project inside the container."
@@ -190,11 +209,14 @@ cmd_release_notes() {
     # Version header
     if [[ "$line" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
       local tag="$line"
-      local marker=""
-      [[ "$tag" == "v$VERSION" ]] && marker="  ${C_PASS}[current]${C_RESET}"
-      printf "\n${C_DIM}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${C_RESET}\n"
-      printf "${C_BOLD}${C_PRIMARY}%s${C_RESET}%s\n" "$tag" "$marker"
-      printf "${C_DIM}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${C_RESET}\n"
+      echo ""
+      printf "${C_DIM}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${C_RESET}\n"
+      if [[ "$tag" == "v$VERSION" ]]; then
+        printf "${C_BOLD}${C_PRIMARY}%s${C_RESET}  ${C_PASS}[current]${C_RESET}\n" "$tag"
+      else
+        printf "${C_BOLD}${C_PRIMARY}%s${C_RESET}\n" "$tag"
+      fi
+      printf "${C_DIM}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${C_RESET}\n"
       in_code_block=0
     # Section end marker
     elif [[ "$line" == "---END---" ]]; then
@@ -267,6 +289,8 @@ find_container() {
 
 # List devcontainers grouped by project, showing work-lab + devcontainer pairs
 cmd_ps() {
+  require_host
+
   header "Running containers"
 
   # Get all running devcontainers
@@ -345,6 +369,8 @@ cmd_ps() {
 }
 
 cmd_up() {
+  require_host
+
   if ! command -v devcontainer &> /dev/null; then
     status_fail "devcontainer CLI not found"
     hint "npm install -g @devcontainers/cli"
@@ -389,11 +415,21 @@ cmd_up() {
   separator
   print_pass "Ready!"
   hint "work-lab shell"
-  hint "work-lab tmux"
+  hint "work-lab mux"
   printf "  ${C_LABEL}project at${C_RESET} ${C_COMMAND}/workspaces/project${C_RESET}\n"
+
+  # Show sidecar mode tips
+  if [[ -d "$project_root/.devcontainer" ]] || [[ -f "$project_root/.devcontainer.json" ]]; then
+    echo ""
+    subheader "Sidecar mode detected"
+    detail "Project has its own devcontainer for building/testing"
+    tip "Use 'work-lab dc <cmd>' to run commands in project devcontainer"
+  fi
 }
 
 cmd_shell() {
+  require_host
+
   local container_id
   container_id=$(find_container)
   if [[ -z "$container_id" ]]; then
@@ -405,6 +441,8 @@ cmd_shell() {
 }
 
 cmd_mux() {
+  require_host
+
   local container_id
   container_id=$(find_container)
   if [[ -z "$container_id" ]]; then
@@ -422,11 +460,16 @@ cmd_mux() {
     fail_exit
   fi
 
+  # Get project name for window naming
+  local project_name
+  project_name=$(docker exec "$container_id" bash -c 'basename /workspaces/project 2>/dev/null' || echo "project")
+
   # Attach to existing session or create a new one named 'lab'
   case "$WORK_LAB_MUX" in
     tmux)
+      # Create or attach, then rename first window to project name
       docker exec -it -u worklab -w /workspaces/project "$container_id" \
-        bash -c 'tmux attach -t lab 2>/dev/null || tmux new -s lab'
+        bash -c "tmux attach -t lab 2>/dev/null || (tmux new -s lab -n '$project_name')"
       ;;
     zellij)
       docker exec -it -u worklab -w /workspaces/project "$container_id" \
@@ -441,6 +484,8 @@ cmd_mux() {
 }
 
 cmd_stop() {
+  require_host
+
   local container_id
   container_id=$(find_container)
   if [[ -z "$container_id" ]]; then
@@ -450,6 +495,68 @@ cmd_stop() {
   activity "Stopping container..."
   docker stop "$container_id" > /dev/null
   status_ok "Stopped"
+}
+
+# Run command in associated project devcontainer (from inside work-lab or host)
+cmd_dc() {
+  local cmd="${1:-}"
+  shift 2>/dev/null || true
+
+  if [[ -z "$cmd" ]]; then
+    echo "Usage: work-lab dc <command> [args...]"
+    echo ""
+    echo "Run a command in the project's devcontainer."
+    echo ""
+    echo "Examples:"
+    printf "  ${C_COMMAND}work-lab dc npm test${C_RESET}        Run tests in devcontainer\n"
+    printf "  ${C_COMMAND}work-lab dc make build${C_RESET}      Build project in devcontainer\n"
+    printf "  ${C_COMMAND}work-lab dc bash${C_RESET}            Interactive shell in devcontainer\n"
+    return 0
+  fi
+
+  # Find project path
+  local project_path
+  if is_inside_container; then
+    project_path="/workspaces/project"
+    if [[ ! -d "$project_path" ]]; then
+      status_fail "Project not mounted at /workspaces/project"
+      fail_exit
+    fi
+  else
+    project_path=$(find_git_root)
+    if [[ -z "$project_path" ]]; then
+      status_fail "Not in a git repository"
+      fail_exit
+    fi
+  fi
+
+  # Find the project's devcontainer
+  local dc_id
+  dc_id=$(docker ps --filter "label=devcontainer.local_folder=$project_path" \
+    --format "{{.ID}}" 2>/dev/null | head -n 1)
+
+  # Exclude work-lab container itself
+  local wl_check
+  wl_check=$(docker inspect "$dc_id" --format '{{range .Mounts}}{{.Destination}}{{end}}' 2>/dev/null)
+  if [[ "$wl_check" == *"/workspaces/work-lab"* ]]; then
+    dc_id=""
+  fi
+
+  if [[ -z "$dc_id" ]]; then
+    status_fail "Project devcontainer not running"
+    hint "start the project's devcontainer first"
+    if is_inside_container; then
+      tip "Run 'devcontainer up' from host in project directory"
+    fi
+    fail_exit
+  fi
+
+  # Run the command
+  if [[ "$cmd" == "bash" ]] || [[ "$cmd" == "sh" ]]; then
+    docker exec -it "$dc_id" "$cmd" "$@"
+  else
+    docker exec "$dc_id" "$cmd" "$@"
+  fi
 }
 
 cmd_doctor() {
@@ -610,12 +717,27 @@ cmd_doctor() {
     status_info "~/.config/work-lab/ not found (optional)"
   fi
 
-  # mode detection
+  # mode detection and sidecar status
   header "Mode"
   if [[ -n "$git_root" ]]; then
     if [[ -d "$git_root/.devcontainer" ]] || [[ -f "$git_root/.devcontainer.json" ]]; then
       status_info "Sidecar mode"
       detail "Project has devcontainer - work-lab runs alongside it"
+
+      # Check if project devcontainer is running
+      if command -v docker &>/dev/null && docker info &>/dev/null; then
+        local dc_id
+        dc_id=$(docker ps --filter "label=devcontainer.local_folder=$git_root" \
+          --format "{{.ID}}" 2>/dev/null | head -n 1)
+
+        if [[ -n "$dc_id" ]]; then
+          status_ok "project devcontainer: running (${dc_id:0:12})"
+          tip "Use 'work-lab dc <cmd>' to run commands in project devcontainer"
+        else
+          status_warn "project devcontainer: not running"
+          hint "devcontainer up --workspace-folder $git_root"
+        fi
+      fi
     else
       status_info "Standalone mode"
       detail "work-lab provides the development environment"
@@ -653,6 +775,10 @@ case "${1:-}" in
     ;;
   ps)
     cmd_ps
+    ;;
+  dc)
+    shift
+    cmd_dc "$@"
     ;;
   doctor)
     cmd_doctor
