@@ -1,0 +1,103 @@
+#!/usr/bin/env bash
+# work-lab
+# A small convenience script for managing the work-lab devcontainer.
+# This script is OPTIONAL. You can use the devcontainer CLI or VS Code directly.
+
+set -e
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_DIR="$(dirname "$SCRIPT_DIR")"
+CONTAINER_NAME="work-lab"
+
+usage() {
+  cat << EOF
+work-lab - manage the work-lab devcontainer
+
+Usage:
+  work-lab up      Start the devcontainer
+  work-lab shell   Attach an interactive shell
+  work-lab tmux    Attach to tmux session (creates 'lab' if missing)
+  work-lab stop    Stop the container
+  work-lab help    Show this message
+
+This script is optional. You can also:
+  - Open the folder in VS Code and use "Reopen in Container"
+  - Use the devcontainer CLI directly
+EOF
+}
+
+# Find the running container ID
+find_container() {
+  docker ps -q --filter "label=devcontainer.local_folder=$REPO_DIR" 2>/dev/null | head -1
+}
+
+cmd_up() {
+  if command -v devcontainer &> /dev/null; then
+    echo "Starting devcontainer..."
+    devcontainer up --workspace-folder "$REPO_DIR"
+  else
+    echo "devcontainer CLI not found."
+    echo "Install it with: npm install -g @devcontainers/cli"
+    echo "Or open this folder in VS Code and use 'Reopen in Container'."
+    exit 1
+  fi
+}
+
+cmd_shell() {
+  CONTAINER_ID=$(find_container)
+  if [ -z "$CONTAINER_ID" ]; then
+    echo "Container not running. Start it with: work-lab up"
+    exit 1
+  fi
+  docker exec -it -u vscode -w /workspaces/work-lab "$CONTAINER_ID" bash
+}
+
+cmd_tmux() {
+  CONTAINER_ID=$(find_container)
+  if [ -z "$CONTAINER_ID" ]; then
+    echo "Container not running. Start it with: work-lab up"
+    exit 1
+  fi
+  # Attach to existing session or create a new one named 'lab'
+  docker exec -it -u vscode -w /workspaces/work-lab "$CONTAINER_ID" \
+    bash -c 'tmux attach -t lab 2>/dev/null || tmux new -s lab'
+}
+
+cmd_stop() {
+  CONTAINER_ID=$(find_container)
+  if [ -z "$CONTAINER_ID" ]; then
+    echo "Container not running."
+    exit 0
+  fi
+  echo "Stopping container..."
+  docker stop "$CONTAINER_ID"
+  echo "Stopped."
+}
+
+# Main
+case "${1:-}" in
+  up)
+    cmd_up
+    ;;
+  shell)
+    cmd_shell
+    ;;
+  tmux)
+    cmd_tmux
+    ;;
+  stop)
+    cmd_stop
+    ;;
+  help|--help|-h)
+    usage
+    ;;
+  "")
+    usage
+    exit 1
+    ;;
+  *)
+    echo "Unknown command: $1"
+    usage
+    exit 1
+    ;;
+esac
