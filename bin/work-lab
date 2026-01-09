@@ -6,7 +6,7 @@
 
 set -Eeuo pipefail
 
-VERSION="0.1.0"
+VERSION="0.1.1"
 
 # shellcheck disable=SC2155
 readonly SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
@@ -16,6 +16,10 @@ readonly REPO_DIR="$(dirname -- "$SCRIPT_DIR")"
 # error handler for debugging
 trap 'printf "Error at line %d: exit %d\n" "$LINENO" "$?" >&2' ERR
 
+# Source the styling library
+# shellcheck source=../lib/style.sh
+source "$REPO_DIR/lib/style.sh"
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Configuration
 # ─────────────────────────────────────────────────────────────────────────────
@@ -24,7 +28,10 @@ trap 'printf "Error at line %d: exit %d\n" "$LINENO" "$?" >&2' ERR
 
 # Additional mounts (arrays, set in config file)
 # Format: "source:target" - will be mounted read-only or read-write
-WORK_LAB_MOUNTS_RO=()    # read-only mounts
+WORK_LAB_MOUNTS_RO=(
+  # Claude config (settings, API keys) - read-only for safety
+  "$HOME/.claude:/home/vscode/.claude"
+)
 WORK_LAB_MOUNTS_RW=()    # read-write mounts
 
 # Source user config if present (can override defaults above)
@@ -107,28 +114,30 @@ build_mount_flags() {
 }
 
 usage() {
-  cat << EOF
-work-lab - containerized environment for AI coding agents
-
-Usage: work-lab <command>
-
-Commands:
-  up        Start work-lab for the current git project
-  shell     Attach an interactive shell
-  tmux      Attach to tmux session (creates 'lab' if missing)
-  stop      Stop the container
-  ps        List running work-lab containers
-  doctor    Check environment and configuration
-  version   Show version information
-  help      Show this message
-
-Run 'work-lab up' from any git repository to start.
-Your project will be mounted at /workspaces/project inside the container.
-EOF
+  echo ""
+  print_bold "work-lab"
+  print_dim "containerized environment for AI coding agents"
+  echo ""
+  print_accent "Usage:"
+  echo "  work-lab <command>"
+  echo ""
+  print_accent "Commands:"
+  printf "  ${C_COMMAND}%-10s${C_RESET} %s\n" "up" "Start work-lab for the current git project"
+  printf "  ${C_COMMAND}%-10s${C_RESET} %s\n" "shell" "Attach an interactive shell"
+  printf "  ${C_COMMAND}%-10s${C_RESET} %s\n" "tmux" "Attach to tmux session (creates 'lab' if missing)"
+  printf "  ${C_COMMAND}%-10s${C_RESET} %s\n" "stop" "Stop the container"
+  printf "  ${C_COMMAND}%-10s${C_RESET} %s\n" "ps" "List running work-lab containers"
+  printf "  ${C_COMMAND}%-10s${C_RESET} %s\n" "doctor" "Check environment and configuration"
+  printf "  ${C_COMMAND}%-10s${C_RESET} %s\n" "version" "Show version information"
+  printf "  ${C_COMMAND}%-10s${C_RESET} %s\n" "help" "Show this message"
+  echo ""
+  print_dim "Run 'work-lab up' from any git repository to start."
+  print_dim "Your project will be mounted at /workspaces/project inside the container."
+  echo ""
 }
 
 cmd_version() {
-  echo "work-lab $VERSION"
+  printf "${C_BOLD}work-lab${C_RESET} ${C_COMMAND}%s${C_RESET}\n" "$VERSION"
 }
 
 # Find the work-lab container (uses devcontainer's label)
@@ -138,18 +147,23 @@ find_container() {
 
 # List all devcontainer instances (work-lab uses devcontainer under the hood)
 cmd_ps() {
-  echo "Running devcontainers:"
-  echo ""
-  docker ps --filter "label=devcontainer.local_folder" \
+  header "Running devcontainers"
+  local output
+  output=$(docker ps --filter "label=devcontainer.local_folder" \
     --format "table {{.ID}}\t{{.Names}}\t{{.Status}}\t{{.Label \"devcontainer.local_folder\"}}" \
-    2>/dev/null || echo "  (none)"
+    2>/dev/null)
+  if [[ -n "$output" ]]; then
+    echo "$output"
+  else
+    status_info "none running"
+    hint "work-lab up"
+  fi
 }
 
 cmd_up() {
   if ! command -v devcontainer &> /dev/null; then
-    echo "devcontainer CLI not found."
-    echo "Install it with: npm install -g @devcontainers/cli"
-    echo "Or open this folder in VS Code and use 'Reopen in Container'."
+    status_fail "devcontainer CLI not found"
+    hint "npm install -g @devcontainers/cli"
     exit 1
   fi
 
@@ -157,41 +171,50 @@ cmd_up() {
   local project_root project_name
   project_root=$(find_git_root)
   if [[ -z "$project_root" ]]; then
-    echo "Error: Not in a git repository." >&2
-    echo "Run 'work-lab up' from the root of a git project." >&2
+    status_fail "Not in a git repository"
+    hint "run 'work-lab up' from the root of a git project"
     exit 1
   fi
   project_name=$(get_project_name "$project_root")
 
-  echo "Starting work-lab for: $project_name"
-  echo "  Project: $project_root"
+  banner "work-lab up"
+  printf "  ${C_LABEL}project${C_RESET}  ${C_COMMAND}%s${C_RESET}\n" "$project_name"
+  printf "  ${C_LABEL}path${C_RESET}     %s\n" "$project_root"
 
   # Build mount flags
   local mount_flags=()
 
   # Add project mount (the current git repo)
   mount_flags+=("--mount" "type=bind,source=$project_root,target=/workspaces/project")
-  echo "  Mount: $project_root -> /workspaces/project"
+  printf "  ${C_LABEL}mount${C_RESET}    %s ${C_MUTED}${ICON_ARROW}${C_RESET} /workspaces/project\n" "$project_root"
 
   # Add additional mounts from config
   if (( ${#WORK_LAB_MOUNTS_RO[@]} > 0 )) || (( ${#WORK_LAB_MOUNTS_RW[@]} > 0 )); then
-    echo "Additional mounts:"
+    echo ""
+    subheader "Additional mounts:"
     readarray -t -O "${#mount_flags[@]}" mount_flags < <(build_mount_flags)
   fi
+
+  echo ""
+  activity "Starting devcontainer..."
 
   # Run devcontainer up
   devcontainer up --workspace-folder "$REPO_DIR" "${mount_flags[@]}"
 
   echo ""
-  echo "Ready! Run 'work-lab shell' or 'work-lab tmux' to attach."
-  echo "Project is at: /workspaces/project"
+  separator
+  print_pass "Ready!"
+  hint "work-lab shell"
+  hint "work-lab tmux"
+  printf "  ${C_LABEL}project at${C_RESET} ${C_COMMAND}/workspaces/project${C_RESET}\n"
 }
 
 cmd_shell() {
   local container_id
   container_id=$(find_container)
   if [[ -z "$container_id" ]]; then
-    echo "Container not running. Start it with: work-lab up" >&2
+    status_fail "Container not running"
+    hint "work-lab up"
     exit 1
   fi
   docker exec -it -u vscode -w /workspaces/project "$container_id" bash
@@ -201,7 +224,8 @@ cmd_tmux() {
   local container_id
   container_id=$(find_container)
   if [[ -z "$container_id" ]]; then
-    echo "Container not running. Start it with: work-lab up" >&2
+    status_fail "Container not running"
+    hint "work-lab up"
     exit 1
   fi
   # Attach to existing session or create a new one named 'lab'
@@ -213,105 +237,100 @@ cmd_stop() {
   local container_id
   container_id=$(find_container)
   if [[ -z "$container_id" ]]; then
-    echo "Container not running."
+    status_info "Container not running"
     exit 0
   fi
-  echo "Stopping container..."
-  docker stop "$container_id"
-  echo "Stopped."
+  activity "Stopping container..."
+  docker stop "$container_id" > /dev/null
+  status_ok "Stopped"
 }
 
 cmd_doctor() {
-  local container_id config_dir project_count errors=0
+  local container_id config_dir errors=0
   local mount_spec src_path tgt_path
 
-  echo ""
-  echo "work-lab doctor"
-  echo "==============="
-  echo ""
+  banner "work-lab doctor"
 
   # check work-lab repo
-  echo "Repository:"
+  header "Repository"
   if [[ -d "$REPO_DIR/.devcontainer" ]]; then
-    echo "  [ok] $REPO_DIR"
+    status_ok "$REPO_DIR"
   else
-    echo "  [error] not found at $REPO_DIR"
+    status_fail "not found at $REPO_DIR"
     ((errors++))
   fi
-  echo ""
 
   # check dependencies
-  echo "Dependencies:"
+  header "Dependencies"
   if command -v docker &>/dev/null; then
-    echo "  [ok] docker: $(docker --version 2>/dev/null | head -n 1 || echo 'installed')"
+    status_ok "docker: $(docker --version 2>/dev/null | head -n 1 || echo 'installed')"
     # Check if docker daemon is running
     if docker info &>/dev/null; then
-      echo "  [ok] docker daemon: running"
+      status_ok "docker daemon: running"
     else
-      echo "  [error] docker daemon: not running (start Docker Desktop or dockerd)"
+      status_fail "docker daemon: not running"
+      hint "start Docker Desktop or dockerd"
       ((errors++))
     fi
   else
-    echo "  [error] docker: not found (install from https://docs.docker.com/get-docker/)"
+    status_fail "docker: not found"
+    hint "install from https://docs.docker.com/get-docker/"
     ((errors++))
   fi
   if command -v devcontainer &>/dev/null; then
-    echo "  [ok] devcontainer CLI: $(devcontainer --version 2>/dev/null || echo 'installed')"
+    status_ok "devcontainer CLI: $(devcontainer --version 2>/dev/null || echo 'installed')"
   else
-    echo "  [error] devcontainer CLI: not found"
-    echo "         install with: npm install -g @devcontainers/cli"
+    status_fail "devcontainer CLI: not found"
+    hint "npm install -g @devcontainers/cli"
     ((errors++))
   fi
-  echo ""
 
   # check container status
-  echo "Container:"
+  header "Container"
   if command -v docker &>/dev/null && docker info &>/dev/null; then
     container_id=$(find_container)
     if [[ -n "$container_id" ]]; then
-      echo "  [ok] running (id: ${container_id:0:12})"
+      status_ok "running (id: ${container_id:0:12})"
     else
-      echo "  [info] not running (start with: work-lab up)"
+      status_info "not running"
+      hint "work-lab up"
     fi
   else
-    echo "  [skip] cannot check (docker not available)"
+    status_skip "cannot check (docker not available)"
   fi
-  echo ""
 
   # show and validate configuration
-  echo "Configuration:"
+  header "Configuration"
   config_dir="$HOME/.config/work-lab"
   if [[ -f "$config_dir/config" ]]; then
-    echo "  [ok] config file: $config_dir/config"
+    status_ok "config file: $config_dir/config"
   else
-    echo "  [info] config file: not found (using defaults)"
+    status_info "config file: not found (using defaults)"
   fi
-  echo "  WORK_LAB_IMAGE=$WORK_LAB_IMAGE"
-  echo ""
+  kv "WORK_LAB_IMAGE=" "$WORK_LAB_IMAGE"
 
   # check current project (git repo)
-  echo "Current project:"
+  header "Current project"
   local git_root
   git_root=$(find_git_root)
   if [[ -n "$git_root" ]]; then
-    echo "  [ok] $(get_project_name "$git_root")"
-    echo "       $git_root"
+    status_ok "$(get_project_name "$git_root")"
+    detail "$git_root"
   else
-    echo "  [warn] not in a git repository"
-    echo "         run 'work-lab up' from within a git project"
+    status_warn "not in a git repository"
+    hint "run 'work-lab up' from within a git project"
   fi
-  echo ""
 
   # validate configured mounts
-  echo "Configured mounts:"
+  header "Configured mounts"
   if (( ${#WORK_LAB_MOUNTS_RO[@]} == 0 && ${#WORK_LAB_MOUNTS_RW[@]} == 0 )); then
-    echo "  [info] none configured (optional)"
+    status_info "none configured (optional)"
   else
     # Check read-only mounts
     if (( ${#WORK_LAB_MOUNTS_RO[@]} > 0 )); then
       for mount_spec in "${WORK_LAB_MOUNTS_RO[@]}"; do
         if [[ "$mount_spec" != *:* ]]; then
-          echo "  [error] invalid format (missing colon): $mount_spec"
+          status_fail "invalid format (missing colon): $mount_spec"
           ((errors++))
           continue
         fi
@@ -322,13 +341,13 @@ cmd_doctor() {
         src_path="${src_path//\$HOME/$HOME}"
         if [[ -e "$src_path" ]]; then
           if [[ -r "$src_path" ]]; then
-            echo "  [ok] $src_path -> $tgt_path (ro)"
+            status_ok "$src_path ${ICON_ARROW} $tgt_path (ro)"
           else
-            echo "  [error] $src_path -> $tgt_path (ro) - not readable"
+            status_fail "$src_path ${ICON_ARROW} $tgt_path (ro) - not readable"
             ((errors++))
           fi
         else
-          echo "  [warn] $src_path -> $tgt_path (ro) - source not found"
+          status_warn "$src_path ${ICON_ARROW} $tgt_path (ro) - source not found"
         fi
       done
     fi
@@ -336,7 +355,7 @@ cmd_doctor() {
     if (( ${#WORK_LAB_MOUNTS_RW[@]} > 0 )); then
       for mount_spec in "${WORK_LAB_MOUNTS_RW[@]}"; do
         if [[ "$mount_spec" != *:* ]]; then
-          echo "  [error] invalid format (missing colon): $mount_spec"
+          status_fail "invalid format (missing colon): $mount_spec"
           ((errors++))
           continue
         fi
@@ -347,65 +366,65 @@ cmd_doctor() {
         src_path="${src_path//\$HOME/$HOME}"
         if [[ -e "$src_path" ]]; then
           if [[ -r "$src_path" && -w "$src_path" ]]; then
-            echo "  [ok] $src_path -> $tgt_path (rw)"
+            status_ok "$src_path ${ICON_ARROW} $tgt_path (rw)"
           else
-            echo "  [error] $src_path -> $tgt_path (rw) - not readable/writable"
+            status_fail "$src_path ${ICON_ARROW} $tgt_path (rw) - not readable/writable"
             ((errors++))
           fi
         else
-          echo "  [warn] $src_path -> $tgt_path (rw) - source not found"
+          status_warn "$src_path ${ICON_ARROW} $tgt_path (rw) - source not found"
         fi
       done
     fi
   fi
-  echo ""
 
   # check user hooks
-  echo "Lifecycle hooks:"
+  header "Lifecycle hooks"
   if [[ -d "$config_dir" ]]; then
     if [[ -f "$config_dir/post-create.sh" ]]; then
       if [[ -x "$config_dir/post-create.sh" ]] || head -1 "$config_dir/post-create.sh" | grep -q '^#!'; then
-        echo "  [ok] post-create.sh"
+        status_ok "post-create.sh"
       else
-        echo "  [warn] post-create.sh (missing shebang or not executable)"
+        status_warn "post-create.sh (missing shebang or not executable)"
       fi
     else
-      echo "  [info] post-create.sh (not found)"
+      status_info "post-create.sh (not found)"
     fi
     if [[ -f "$config_dir/post-start.sh" ]]; then
       if [[ -x "$config_dir/post-start.sh" ]] || head -1 "$config_dir/post-start.sh" | grep -q '^#!'; then
-        echo "  [ok] post-start.sh"
+        status_ok "post-start.sh"
       else
-        echo "  [warn] post-start.sh (missing shebang or not executable)"
+        status_warn "post-start.sh (missing shebang or not executable)"
       fi
     else
-      echo "  [info] post-start.sh (not found)"
+      status_info "post-start.sh (not found)"
     fi
   else
-    echo "  [info] ~/.config/work-lab/ not found (optional)"
+    status_info "~/.config/work-lab/ not found (optional)"
   fi
-  echo ""
 
   # mode detection
-  echo "Mode:"
+  header "Mode"
   if [[ -n "$git_root" ]]; then
     if [[ -d "$git_root/.devcontainer" ]] || [[ -f "$git_root/.devcontainer.json" ]]; then
-      echo "  [info] Project has devcontainer -> Sidecar mode"
-      echo "         work-lab runs alongside project's own devcontainer"
+      status_info "Sidecar mode"
+      detail "Project has devcontainer - work-lab runs alongside it"
     else
-      echo "  [info] Standalone mode"
-      echo "         work-lab provides the development environment"
+      status_info "Standalone mode"
+      detail "work-lab provides the development environment"
     fi
+  else
+    status_skip "cannot determine (not in a git repo)"
   fi
-  echo ""
 
   # summary
-  echo "─────────────────────────────"
+  echo ""
+  separator
   if (( errors > 0 )); then
-    echo "Found $errors error(s). Fix them before running 'work-lab up'."
+    print_fail "Found $errors error(s). Fix them before running 'work-lab up'."
     return 1
   else
-    echo "All checks passed. Ready to run 'work-lab up'."
+    print_pass "All checks passed. Ready to run 'work-lab up'."
     return 0
   fi
 }
