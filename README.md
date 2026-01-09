@@ -1,6 +1,8 @@
 <!-- doc-audience: human -->
 # work-lab (Embracing Development in the Post-2025 Future)
 
+[![docs: ai-human-docs](https://raw.githubusercontent.com/modern-tooling/ai-human-docs/main/badges/ai-human-docs.svg)](https://github.com/modern-tooling/ai-human-docs)
+
 A container-based lab for humans and AI coding agents to think, plan, code, and operate in an experimental space protected by guardrails.
 
 ## TL;DR
@@ -296,3 +298,9 @@ The one-liner install (`curl | bash`) and `:latest` Docker tags carry inherent s
 3. **No repo modifications.** Projects remain untouched.
 4. **Light tooling.** Only add what reduces thinking during initial setup.
 5. **Clear boundaries.** `work-lab` provides thinking space, project devcontainers run.
+
+---
+
+## Thanks to Our Major Contributors
+
+- [Ryan Snodgrass](https://github.com/rsnodgrass)
