@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # work-lab
+# Copyright (c) 2026 Ryan Snodgrass. MIT License.
 # A small convenience script for managing the work-lab devcontainer.
 # This script is OPTIONAL. You can use the devcontainer CLI or VS Code directly.
 
@@ -18,6 +19,7 @@ Usage:
   work-lab shell   Attach an interactive shell
   work-lab tmux    Attach to tmux session (creates 'lab' if missing)
   work-lab stop    Stop the container
+  work-lab doctor  Check environment and configuration
   work-lab help    Show this message
 
 This script is optional. You can also:
@@ -74,6 +76,92 @@ cmd_stop() {
   echo "Stopped."
 }
 
+cmd_doctor() {
+  echo ""
+  echo "work-lab doctor"
+  echo "==============="
+  echo ""
+
+  # check work-lab repo
+  echo "work-lab repo:"
+  if [ -d "$REPO_DIR/.devcontainer" ]; then
+    echo "  [ok] $REPO_DIR"
+  else
+    echo "  [error] not found at $REPO_DIR"
+  fi
+  echo ""
+
+  # check dependencies
+  echo "Dependencies:"
+  if command -v docker &> /dev/null; then
+    echo "  [ok] docker: $(docker --version | head -1)"
+  else
+    echo "  [error] docker: not found"
+  fi
+  if command -v devcontainer &> /dev/null; then
+    echo "  [ok] devcontainer CLI: $(devcontainer --version 2>/dev/null || echo 'installed')"
+  else
+    echo "  [warn] devcontainer CLI: not found (install with: npm install -g @devcontainers/cli)"
+  fi
+  echo ""
+
+  # check container status
+  echo "Container:"
+  CONTAINER_ID=$(find_container)
+  if [ -n "$CONTAINER_ID" ]; then
+    echo "  [ok] running (id: ${CONTAINER_ID:0:12})"
+  else
+    echo "  [info] not running"
+  fi
+  echo ""
+
+  # check user config
+  echo "User config (~/.config/work-lab/):"
+  CONFIG_DIR="$HOME/.config/work-lab"
+  if [ -d "$CONFIG_DIR" ]; then
+    echo "  [ok] directory exists"
+    if [ -f "$CONFIG_DIR/post-create.sh" ]; then
+      echo "  [ok] post-create.sh found"
+    else
+      echo "  [info] post-create.sh not found (optional)"
+    fi
+    if [ -f "$CONFIG_DIR/post-start.sh" ]; then
+      echo "  [ok] post-start.sh found"
+    else
+      echo "  [info] post-start.sh not found (optional)"
+    fi
+  else
+    echo "  [info] not configured (optional)"
+    echo "         create with: mkdir -p ~/.config/work-lab"
+  fi
+  echo ""
+
+  # check projects mount source
+  echo "Projects directory:"
+  PROJECTS_DIR="$HOME/projects"
+  if [ -d "$PROJECTS_DIR" ]; then
+    PROJECT_COUNT=$(find "$PROJECTS_DIR" -maxdepth 1 -type d | wc -l | tr -d ' ')
+    echo "  [ok] $PROJECTS_DIR ($((PROJECT_COUNT - 1)) items)"
+  else
+    echo "  [warn] $PROJECTS_DIR not found"
+    echo "         create it or edit devcontainer.json to change mount source"
+  fi
+  echo ""
+
+  # check if current directory has a devcontainer
+  echo "Current directory ($PWD):"
+  if [ -d ".devcontainer" ] || [ -f ".devcontainer.json" ]; then
+    if [ "$PWD" = "$REPO_DIR" ]; then
+      echo "  [info] this is the work-lab repo"
+    else
+      echo "  [info] has devcontainer -> Sidecar mode"
+    fi
+  else
+    echo "  [info] no devcontainer -> Standalone mode"
+  fi
+  echo ""
+}
+
 # Main
 case "${1:-}" in
   up)
@@ -87,6 +175,9 @@ case "${1:-}" in
     ;;
   stop)
     cmd_stop
+    ;;
+  doctor)
+    cmd_doctor
     ;;
   help|--help|-h)
     usage

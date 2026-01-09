@@ -8,10 +8,13 @@
   "mounts": [
     // Mount your projects directory into the container.
     // Adjust the host path if your projects live elsewhere.
-    "source=${localEnv:HOME}/projects,target=/workspaces/projects,type=bind,consistency=cached"
+    "source=${localEnv:HOME}/projects,target=/workspaces/projects,type=bind,consistency=cached",
+    // Mount user's XDG config for work-lab customizations (optional).
+    "source=${localEnv:HOME}/.config/work-lab,target=/home/vscode/.config/work-lab,type=bind,consistency=cached"
   ],
   "remoteUser": "vscode",
-  "postCreateCommand": "bash .devcontainer/postCreate.sh",
+  "postCreateCommand": "bash .devcontainer/post-create.sh",
+  "postStartCommand": "bash .devcontainer/post-start.sh",
   "customizations": {
     "vscode": {
       "settings": {

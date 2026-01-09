@@ -1,136 +1,129 @@
+<!-- doc-audience: human, ai-editable -->
 # work-lab
 
-A calm, boring, reliable devcontainer for experimental work.
+A container-based lab for humans and AI coding agents to think, plan, code, and operate in an experimental space protected by guardrails.
+
+## TL;DR
+
+| Your situation | Mode | What to do |
+|----------------|------|------------|
+| Project has no devcontainer | **Standalone** | work-lab is your devcontainer |
+| Project has its own devcontainer | **Sidecar** | Run both containers side-by-side |
+
+> **Mental model:**
+> work-lab is where you think and operate.
+> Project devcontainers are where things run.
+> They do not need to be the same place.
 
 ## What this is
 
 work-lab is an **optional, personal** environment for:
 
 - Thinking and planning
-- Running coding agents and orchestrators ([Claude](https://github.com/anthropics/claude-code), [Gastown](https://github.com/steveyegge/gastown), [SageOx](https://github.com/sageox/))
+- Running coding agents ([Claude](https://github.com/anthropics/claude-code), [Gastown](https://github.com/steveyegge/gastown), [SageOx](https://github.com/sageox/))
 - Operating with tmux
 - Experimenting safely
 
 It provides a consistent shell with your tools, independent of whatever project you're working on.
 
-## What this is not
+## What this is NOT
 
 - **Not a project template.** This repo never modifies the projects you work on.
 - **Not a replacement for project devcontainers.** If a project has its own devcontainer, that's where builds and services run.
 - **Not infrastructure.** No databases, no services, no orchestration.
 
-## The mental model
-
-```
-work-lab is where you think and operate.
-Project devcontainers are where things run.
-They do not need to be the same place.
-```
-
-```mermaid
-flowchart LR
-    subgraph modeA ["Mode A: No project devcontainer"]
-        A1[work-lab container<br/>think + operate] --> A2[("/workspaces/projects/foo")]
-    end
-
-    subgraph modeB ["Mode B: Project has devcontainer"]
-        B1[work-lab container<br/>think / agent / operate] -.->|"filesystem"| B3[(project repo)]
-        B2[project container<br/>build / run / test] --> B3
-    end
-```
+---
 
 ## Quick start
 
-1. Clone this repo
-2. Open in VS Code and "Reopen in Container"
-   (or run `devcontainer up --workspace-folder .`)
-3. Start a tmux session: `tmux new -s lab`
-4. Navigate to a mounted project and work
-
-## Two usage modes
-
-There are two modes. You do not mix them.
-
-### Mode A: Projects without a devcontainer
-
-This is the easy win, and where work-lab shines most.
-
-**How it works:**
-- work-lab *is* the devcontainer
-- Mount the project repo into `/workspaces/projects/foo`
-- Work entirely from inside the lab
-
 ```bash
+# 1. Clone and open
+git clone <this-repo>
+cd work-lab
+
+# 2. Start the container
+devcontainer up --workspace-folder .
+# Or open in any devcontainer-compatible IDE and "Reopen in Container"
+
+# 3. Start working
+tmux new -s lab
 cd /workspaces/projects/your-project
-claude
-gastown
-# ...
+claude    # or opencode, aider, etc.
 ```
 
-**Why this is ideal:**
+---
+
+## Usage modes
+
+### Standalone mode
+
+work-lab **is** the devcontainer. One container does everything.
+
+```mermaid
+flowchart TB
+    Host[Host filesystem<br/>~/projects/foo]
+    WL[work-lab container<br/>think + edit + run]
+    Host -->|bind mount| WL
+```
+
+**When to use:** Project has no devcontainer, or you don't need its build environment.
+
+**Why it works well:**
 - No repo changes required
 - Safe agent execution
 - Reproducible tools
 - One mental model
 
-### Mode B: Projects with an existing devcontainer
+### Sidecar mode
 
-This is where people get confused, but the answer is simple:
+Two containers, both mounting the same project from your host filesystem.
 
-**Rule:** You do NOT try to "merge" devcontainers.
+```mermaid
+flowchart TB
+    Host[Host filesystem<br/>~/projects/foo]
+    WL[work-lab container<br/>think + agent]
+    Proj[project container<br/>build + run + test]
+    Host -->|bind mount| WL
+    Host -->|bind mount| Proj
+```
 
-Instead:
-- **Project devcontainer** = build/run environment
-- **work-lab** = thinking / agent / operations environment
+**When to use:** Project has its own devcontainer with specific build tools, services, or runtime.
 
-They are adjacent, not nested.
+| Container | Purpose |
+|-----------|---------|
+| work-lab | Thinking, agents, operations |
+| Project's devcontainer | Build, run, test, services |
 
-#### Pattern 1: work-lab drives the project container
+**Key insight:** You do NOT merge devcontainers. They run independently, sharing only the filesystem via the host.
 
-1. Open project devcontainer (VS Code or CLI)
-2. Let it run normally
-3. Use work-lab to:
-   - Run Claude
-   - Reason about code
-   - Inspect files
-   - Generate patches
-4. Apply changes via git / filesystem
+**Common patterns:**
 
-Think: work-lab is the "control room", project container is the "machine".
+1. **Control room**: Run Claude in work-lab, execute builds in project container
+2. **Editor + agent**: Edit in work-lab, let project container handle compilation/tests
+3. **Agent shell**: Project runs locally on host, work-lab is just for agents
 
-#### Pattern 2: work-lab as read/write editor + agent
+> **Avoid:** Nesting containers, sharing Docker networks, syncing services. These lead to fragility.
 
-1. Mount the project repo into work-lab
-2. Use Claude + tmux there
-3. Let the project's devcontainer handle builds, tests, services
-
-This works well when the project devcontainer is heavy, locked down, or opinionated.
-
-#### Pattern 3: No devcontainer at all (project runs locally)
-
-work-lab is just a safe shell + agent environment. The project runs wherever it runs.
-
-### What you should NOT try to do
-
-- Run project devcontainer inside work-lab
-- Share Docker networks
-- Sync services across containers
-- "Standardize" project devcontainers via work-lab
-
-Those paths lead to fragility and mental load.
+---
 
 ## Installed tools
 
-- **tmux** — persistent terminal sessions
-- **git, curl, jq, ripgrep, fzf** — standard utilities
-- **Node.js 22 LTS** — JavaScript runtime
-- **Claude CLI** — coding agent
-- **Gastown** — steveyegge's tool
-- **Beads** — task management
+| Tool | Purpose |
+|------|---------|
+| tmux | Persistent terminal sessions |
+| git, curl, jq, ripgrep, fzf | Standard utilities |
+| Node.js 22 LTS | JavaScript runtime |
+| Claude CLI | Coding agent |
+| Gastown | steveyegge's tool |
+| Beads | Task management |
 
-## Mounting projects
+---
 
-By default, `~/projects` on your host is mounted to `/workspaces/projects` in the container.
+## Configuration
+
+### Mounting projects
+
+By default, `~/projects` on your host mounts to `/workspaces/projects` in the container.
 
 To change this, edit `.devcontainer/devcontainer.json`:
 
@@ -140,50 +133,47 @@ To change this, edit `.devcontainer/devcontainer.json`:
 ]
 ```
 
-## Helper script (optional)
+### User customization
 
-A small convenience script is provided at `bin/work-lab`:
+Customize work-lab via `~/.config/work-lab/` on your host (XDG convention):
+
+| File | When it runs |
+|------|--------------|
+| `post-create.sh` | Once, after container creation |
+| `post-start.sh` | Every time container starts |
+
+**Example:** Install a custom coding agent:
+
+```bash
+mkdir -p ~/.config/work-lab
+cat > ~/.config/work-lab/post-create.sh << 'EOF'
+#!/usr/bin/env bash
+npm install -g opencode
+EOF
+```
+
+See `examples/` for more examples.
+
+### Helper script (optional)
+
+A convenience script is provided at `bin/work-lab`:
 
 ```bash
 work-lab up      # Start the devcontainer
 work-lab shell   # Attach an interactive shell
 work-lab tmux    # Attach to tmux session (creates 'lab' if missing)
 work-lab stop    # Stop the container
+work-lab doctor  # Check environment and configuration
 ```
 
-This script is optional. You can use VS Code or the devcontainer CLI directly.
+To use: `export PATH="$PATH:/path/to/work-lab/bin"`
 
-To use it, add to your PATH:
-
-```bash
-export PATH="$PATH:/path/to/work-lab/bin"
-```
+---
 
 ## Design principles
 
 1. **Boring is good.** No clever abstractions. No magic.
 2. **Optional always.** Nothing here is required.
 3. **No repo modifications.** Projects remain untouched.
-4. **Light tooling.** Only add what reduces thinking, not increases it.
+4. **Light tooling.** Only add what reduces thinking.
 5. **Clear boundaries.** work-lab thinks, project devcontainers run.
-
-## Local customization
-
-For personal tweaks that shouldn't be checked in:
-
-- Create a `.local/` directory (gitignored)
-- Add your own scripts, configs, aliases there
-- Source them from your shell profile inside the container
-
-Example:
-
-```bash
-# In container, add to ~/.bashrc:
-if [ -f /workspaces/work-lab/.local/bashrc ]; then
-  source /workspaces/work-lab/.local/bashrc
-fi
-```
-
-## License
-
-MIT
