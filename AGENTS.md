@@ -34,10 +34,19 @@ When releasing a new version (after human approval):
 
 1. Update `VERSION` in `bin/work-lab`
 2. Update `CHANGELOG.md` with release notes
-3. Create git tag: `git tag -a v0.2.0 -m "Release v0.2.0"`
-4. Push tag: `git push origin v0.2.0`
-5. GitHub Actions will build and push Docker image to GHCR
-6. **MUST** update the Homebrew tap at [modern-tooling/homebrew-tap](https://github.com/modern-tooling/homebrew-tap) with the new version
+3. Commit and push to main
+4. Create git tag: `git tag -a v0.3.0 -m "Release v0.3.0"`
+5. Push tag: `git push origin v0.3.0`
+6. GitHub Actions will build and push Docker image to GHCR
+7. **MUST** update Homebrew tap (this is NOT automated):
+   ```bash
+   # Get SHA256 of the new release tarball
+   curl -sL https://github.com/modern-tooling/work-lab/archive/refs/tags/v0.3.0.tar.gz | shasum -a 256
+
+   # Update Formula/work-lab.rb in modern-tooling/homebrew-tap:
+   # - Change url to new tag
+   # - Change sha256 to new hash
+   ```
 
 **Release frequency:** One version per day maximum. If multiple features land same day, combine into single release.
 
