@@ -6,15 +6,10 @@
 # This file is sourced by work-lab before running commands.
 # Set environment variables to customize behavior.
 #
-# shellcheck disable=SC2034  # Variables used when sourced by work-lab
-
-# ─────────────────────────────────────────────────────────────────────────────
-# Projects directory
-# ─────────────────────────────────────────────────────────────────────────────
-# Where your projects live on the host. Mounted to /workspaces/projects.
-# Default: $HOME/projects
+# Note: Your current git project is automatically mounted to /workspaces/project
+# when you run 'work-lab up'. No configuration needed for basic usage.
 #
-# export WORK_LAB_PROJECTS_DIR="$HOME/Code"
+# shellcheck disable=SC2034  # Variables used when sourced by work-lab
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Docker image

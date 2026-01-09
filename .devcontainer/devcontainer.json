@@ -6,11 +6,9 @@
   "workspaceFolder": "/workspaces/work-lab",
   "workspaceMount": "source=${localWorkspaceFolder},target=/workspaces/work-lab,type=bind,consistency=cached",
   "mounts": [
-    // Mount your projects directory into the container.
-    // Override with WORK_LAB_PROJECTS_DIR in ~/.config/work-lab/config
-    "source=${localEnv:WORK_LAB_PROJECTS_DIR:-${localEnv:HOME}/projects},target=/workspaces/projects,type=bind,consistency=cached",
-    // Mount user's XDG config for work-lab customizations (optional).
+    // User's XDG config for work-lab customizations (optional)
     "source=${localEnv:HOME}/.config/work-lab,target=/home/vscode/.config/work-lab,type=bind,consistency=cached"
+    // Note: Project mount is added dynamically by 'work-lab up' based on current git repo
   ],
   "remoteUser": "vscode",
   "postCreateCommand": "bash .devcontainer/post-create.sh",
