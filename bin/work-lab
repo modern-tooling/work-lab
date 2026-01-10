@@ -215,7 +215,6 @@ usage() {
   printf "  ${C_COMMAND}%-14s${C_RESET} %s\n" "rebuild" "Stop, remove, and start fresh container"
   printf "  ${C_COMMAND}%-14s${C_RESET} %s\n" "ps" "List running work-lab containers"
   printf "  ${C_COMMAND}%-14s${C_RESET} %s\n" "ports" "Show forwarded ports"
-  printf "  ${C_COMMAND}%-14s${C_RESET} %s\n" "vscode" "Open VS Code attached to container"
   printf "  ${C_COMMAND}%-14s${C_RESET} %s\n" "prune" "Clean up stopped containers"
   printf "  ${C_COMMAND}%-14s${C_RESET} %s\n" "dc <cmd>" "Run command in project's devcontainer"
   printf "  ${C_COMMAND}%-14s${C_RESET} %s\n" "doctor" "Check environment and configuration"
@@ -1155,41 +1154,6 @@ cmd_ports() {
   fi
 }
 
-# Open VS Code attached to work-lab container
-cmd_vscode() {
-  require_host
-
-  local container_id
-  container_id=$(find_container)
-  if [[ -z "$container_id" ]]; then
-    local project_name
-    project_name=$(basename "$(find_git_root 2>/dev/null)" 2>/dev/null || echo "this project")
-    status_fail "No work-lab running for $project_name"
-    action "Start: ${C_COMMAND}work-lab start${C_ACTION}"
-    return 1
-  fi
-
-  if ! command -v code &>/dev/null; then
-    status_fail "VS Code CLI not found"
-    action "Install: ${C_COMMAND}code${C_ACTION} command from VS Code Command Palette"
-    return 1
-  fi
-
-  # Get container name for the URI
-  local container_name
-  container_name=$(docker inspect --format '{{.Name}}' "$container_id" | tr -d '/')
-
-  activity "Opening VS Code..."
-
-  # Use the Dev Containers extension's remote URI format
-  # Format: vscode-remote://dev-container+<hex-encoded-config>/workspaces/project
-  # Simpler approach: just use attached-container
-  code --folder-uri "vscode-remote://attached-container+$(printf '%s' "$container_id" | xxd -p)/workspaces/project" 2>/dev/null &
-
-  status_ok "VS Code opening"
-  detail "If prompted, select 'Reopen in Container'"
-}
-
 # Run command in associated project devcontainer (from inside work-lab or host)
 cmd_dc() {
   local cmd="${1:-}"
@@ -1858,9 +1822,6 @@ case "${1:-}" in
     ;;
   ports)
     cmd_ports
-    ;;
-  vscode|code)
-    cmd_vscode
     ;;
   stop|down)
     cmd_stop

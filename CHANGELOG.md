@@ -12,7 +12,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **`wl mux [project]`**: Attach to any running work-lab by project name (not just current directory)
 - **`wl ports`**: Show forwarded ports for work-lab and paired devcontainer
-- **`wl vscode`**: Open VS Code attached to the work-lab container
 - **`wl prune`**: Clean up stopped work-lab containers (use `--all` for images too)
 - **Session restore**: tmux layout persists across container rebuilds
   - `prefix + W` saves session layout to project's `.work-lab/` directory

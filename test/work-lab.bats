@@ -792,54 +792,6 @@ EOF
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
-# VSCode Command Tests
-# ─────────────────────────────────────────────────────────────────────────────
-
-@test "vscode command is registered" {
-  run grep -E 'vscode\|code\)' "$PROJECT_ROOT/bin/work-lab"
-  [ "$status" -eq 0 ]
-}
-
-@test "cmd_vscode function is defined in work-lab" {
-  run grep -q 'cmd_vscode()' "$PROJECT_ROOT/bin/work-lab"
-  [ "$status" -eq 0 ]
-}
-
-@test "vscode command uses code CLI" {
-  run grep -A20 'cmd_vscode()' "$PROJECT_ROOT/bin/work-lab"
-  [ "$status" -eq 0 ]
-  [[ "$output" == *"code"* ]]
-}
-
-@test "vscode fails when container not running" {
-  # Mock docker to return empty
-  cat > "$MOCK_BIN/docker" << 'EOF'
-#!/bin/bash
-echo ""
-exit 0
-EOF
-  chmod +x "$MOCK_BIN/docker"
-  export PATH="$MOCK_BIN:$PATH"
-
-  cd "$PROJECT_ROOT"
-  run "$PROJECT_ROOT/bin/work-lab" vscode 2>&1
-  [ "$status" -ne 0 ]
-  [[ "$output" == *"not running"* ]] || [[ "$output" == *"No work-lab"* ]]
-}
-
-@test "help shows vscode command" {
-  run "$PROJECT_ROOT/bin/work-lab" help
-  [ "$status" -eq 0 ]
-  [[ "$output" == *"vscode"* ]]
-}
-
-@test "code alias works for vscode command" {
-  # Verify both vscode and code are handled
-  run grep -E 'vscode\|code\)' "$PROJECT_ROOT/bin/work-lab"
-  [ "$status" -eq 0 ]
-}
-
-# ─────────────────────────────────────────────────────────────────────────────
 # Session Restore Tests
 # ─────────────────────────────────────────────────────────────────────────────
 
