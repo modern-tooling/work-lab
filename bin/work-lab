@@ -33,6 +33,24 @@ fail_exit() {
 source "$REPO_DIR/lib/style.sh"
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Portability helpers
+# ─────────────────────────────────────────────────────────────────────────────
+# Portable timeout command (macOS doesn't have timeout by default)
+# Falls back to gtimeout (from coreutils) or runs without timeout
+_timeout() {
+  local seconds="$1"
+  shift
+  if command -v timeout &>/dev/null; then
+    timeout "$seconds" "$@"
+  elif command -v gtimeout &>/dev/null; then
+    gtimeout "$seconds" "$@"
+  else
+    # no timeout available - run without (may hang on unresponsive systems)
+    "$@"
+  fi
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Configuration
 # ─────────────────────────────────────────────────────────────────────────────
 # Defaults (can be overridden by ~/.config/work-lab/config or environment)
@@ -48,8 +66,17 @@ WORK_LAB_MOUNTS_RO=(
 WORK_LAB_MOUNTS_RW=()    # read-write mounts
 
 # Source user config if present (can override defaults above)
+# SECURITY NOTE: Config is user-controlled. Path traversal in mounts is
+# intentional - users explicitly configure what to mount. Anyone who can
+# edit this file already has full host access.
 config_file="$HOME/.config/work-lab/config"
 if [[ -f "$config_file" ]]; then
+  # Validate syntax before sourcing to provide helpful error messages
+  if ! bash -n "$config_file" 2>/dev/null; then
+    echo "Error: Syntax error in config file: $config_file" >&2
+    echo "Fix the syntax error and try again." >&2
+    exit 1
+  fi
   # shellcheck source=/dev/null
   source "$config_file"
 fi
@@ -61,6 +88,9 @@ export WORK_LAB_IMAGE
 # Container detection
 # ─────────────────────────────────────────────────────────────────────────────
 # Check if running inside work-lab container
+# SECURITY NOTE: Environment variable can be spoofed, but this only causes
+# misleading errors - no privilege escalation. Anyone with host access can
+# already docker exec into any container.
 is_inside_container() {
   [[ -f /workspaces/work-lab/.devcontainer/devcontainer.json ]] || \
   [[ "${WORK_LAB_CONTAINER:-}" == "1" ]]
@@ -70,7 +100,7 @@ is_inside_container() {
 require_host() {
   if is_inside_container; then
     status_fail "This command must be run on the host, not inside work-lab"
-    hint "exit the container and run from your host terminal"
+    action "Exit container, then run from host terminal"
     fail_exit
   fi
 }
@@ -87,6 +117,15 @@ find_git_root() {
 get_project_name() {
   local git_root="$1"
   basename "$git_root"
+}
+
+# Check if a project has a devcontainer configuration
+# Handles all three patterns: .devcontainer/, .devcontainer.json, .devcontainer/devcontainer.json
+has_devcontainer() {
+  local project_path="$1"
+  [[ -d "$project_path/.devcontainer" ]] || \
+  [[ -f "$project_path/.devcontainer.json" ]] || \
+  [[ -f "$project_path/.devcontainer/devcontainer.json" ]]
 }
 
 # Build mount flags for devcontainer up
@@ -156,7 +195,7 @@ usage() {
   echo "  work-lab <command>"
   echo ""
   print_accent "Commands:"
-  printf "  ${C_COMMAND}%-14s${C_RESET} %s\n" "up" "Start work-lab for the current git project"
+  printf "  ${C_COMMAND}%-14s${C_RESET} %s\n" "start" "Start work-lab for the current git project"
   printf "  ${C_COMMAND}%-14s${C_RESET} %s\n" "mux" "Attach to tmux session ${C_DIM}(recommended)${C_RESET}"
   printf "  ${C_COMMAND}%-14s${C_RESET} %s\n" "shell" "Run a one-off shell command"
   printf "  ${C_COMMAND}%-14s${C_RESET} %s\n" "stop" "Stop the container"
@@ -169,7 +208,7 @@ usage() {
   printf "  ${C_COMMAND}%-14s${C_RESET} %s\n" "help" "Show this message"
   echo ""
   print_accent "Workflow:"
-  print_dim "  1. wl up      Start work-lab for your project"
+  print_dim "  1. wl start   Start work-lab for your project"
   print_dim "  2. wl mux     Enter tmux session (persistent, multiple windows)"
   echo ""
   print_dim "https://github.com/modern-tooling/work-lab"
@@ -189,14 +228,14 @@ cmd_release_notes() {
 
   if ! command -v curl &>/dev/null; then
     print_dim "curl not available"
-    hint "https://github.com/modern-tooling/work-lab/releases"
+    action "Releases: ${C_COMMAND}https://github.com/modern-tooling/work-lab/releases${C_ACTION}"
     return
   fi
 
   releases=$(curl -sL "$url" 2>/dev/null)
   if [[ -z "$releases" ]] || ! echo "$releases" | jq -e '.' &>/dev/null; then
     print_dim "Could not fetch release notes"
-    hint "https://github.com/modern-tooling/work-lab/releases"
+    action "Releases: ${C_COMMAND}https://github.com/modern-tooling/work-lab/releases${C_ACTION}"
     return
   fi
 
@@ -213,7 +252,7 @@ cmd_release_notes() {
   local parsed
   if ! parsed=$(echo "$releases" | jq -r '.[] | "\(.tag_name)\n\(.body)\n---END---"' 2>/dev/null); then
     print_dim "No releases found"
-    hint "https://github.com/modern-tooling/work-lab/releases"
+    action "Releases: ${C_COMMAND}https://github.com/modern-tooling/work-lab/releases${C_ACTION}"
     return 0
   fi
   echo "$parsed" | while IFS= read -r line; do
@@ -330,7 +369,7 @@ check_devcontainer_sshd() {
   local container_id="$1"
   local dc_ip
   dc_ip=$(docker inspect --format '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' "$container_id" 2>/dev/null | head -1)
-  [[ -n "$dc_ip" ]] && timeout 0.5 bash -c "echo >/dev/tcp/$dc_ip/22" 2>/dev/null
+  [[ -n "$dc_ip" ]] && _timeout 2 bash -c "echo >/dev/tcp/$dc_ip/22" 2>/dev/null
 }
 
 # Ensure SSH tunnel is set up for a project
@@ -343,6 +382,12 @@ check_devcontainer_sshd() {
 #   (by default, each devcontainer is on its own network)
 # - Injects public key via docker exec (host has Docker access, work-lab doesn't)
 # - work-lab reads credentials from .work-lab/ to connect (no Docker needed)
+#
+# SECURITY NOTE: SSH keys are generated by work-lab via ssh-keygen. The pubkey
+# is injected into the devcontainer's authorized_keys. This is safe because:
+# 1. The host already has Docker access (can docker exec into any container)
+# 2. Files are created in user's project directory (user-controlled)
+# 3. If an attacker can modify these files, they already have host access
 #
 ensure_ssh_tunnel() {
   local project_path="$1"
@@ -372,7 +417,7 @@ ensure_ssh_tunnel() {
     return 0
   fi
 
-  if ! timeout 1 bash -c "echo >/dev/tcp/$dc_ip/22" 2>/dev/null; then
+  if ! _timeout 2 bash -c "echo >/dev/tcp/$dc_ip/22" 2>/dev/null; then
     # sshd not running - don't create .work-lab/ (user hasn't enabled sshd feature)
     return 0
   fi
@@ -464,7 +509,7 @@ cmd_ps() {
 
   if [[ -z "$containers" ]]; then
     status_info "none running"
-    hint "work-lab up"
+    action "Run ${C_COMMAND}work-lab start${C_ACTION}"
     return
   fi
 
@@ -509,12 +554,10 @@ cmd_ps() {
   local current_project
   current_project=$(find_git_root 2>/dev/null)
   if [[ -n "$current_project" ]]; then
-    local has_devcontainer=0
-    if [[ -d "$current_project/.devcontainer" ]] || [[ -f "$current_project/.devcontainer.json" ]]; then
-      has_devcontainer=1
-    fi
     # Add current project if it has a devcontainer and isn't already in the list
-    if (( has_devcontainer )) && [[ -z "${worklabs_for_project[$current_project]:-}" ]] && [[ -z "${devcontainer_for_project[$current_project]:-}" ]]; then
+    if has_devcontainer "$current_project" && \
+       [[ -z "${worklabs_for_project[$current_project]:-}" ]] && \
+       [[ -z "${devcontainer_for_project[$current_project]:-}" ]]; then
       projects+=("$current_project")
     fi
   fi
@@ -523,7 +566,7 @@ cmd_ps() {
   local project_count=${#projects[@]}
   if (( project_count == 0 )); then
     status_info "none running"
-    hint "work-lab up"
+    action "Run ${C_COMMAND}work-lab start${C_ACTION}"
     return
   fi
 
@@ -574,13 +617,13 @@ cmd_ps() {
       printf "  └─ ${C_DIM}devcontainer${C_RESET}  ${C_DIM}%s${C_RESET}  ${C_PASS}●${C_RESET} %b ${C_DIM}%s${C_RESET}\n" "${dc_id:0:12}" "$ssh_indicator" "${container_name[$dc_id]}"
     elif (( wl_count > 0 )); then
       # Only work-lab(s), no devcontainer running
-      local has_devcontainer=0
-      if [[ -d "$project/.devcontainer" ]] || [[ -f "$project/.devcontainer.json" ]]; then
-        has_devcontainer=1
+      local project_has_dc=0
+      if has_devcontainer "$project"; then
+        project_has_dc=1
       fi
       if (( wl_count == 1 )); then
         local wl_id="${wl_array[0]}"
-        if (( has_devcontainer )); then
+        if (( project_has_dc )); then
           # Show work-lab and stopped devcontainer as separate tree entries
           printf "  ├─ ${C_COMMAND}work-lab${C_RESET}      ${C_DIM}%s${C_RESET}  ${C_PASS}●${C_RESET}  ${C_DIM}%s${C_RESET}\n" "${wl_id:0:12}" "${container_name[$wl_id]}"
           printf "  └─ ${C_DIM}devcontainer${C_RESET}  ${C_DIM}────────────${C_RESET}  ${C_WARN}○${C_RESET}  ${C_WARN}stopped${C_RESET}\n"
@@ -592,14 +635,14 @@ cmd_ps() {
         # Multiple work-labs
         local i=0
         for wl_id in "${wl_array[@]}"; do
-          ((i++))
+          ((i++)) || true
           local connector="├"
-          if (( i == wl_count )) && (( ! has_devcontainer )); then
+          if (( i == wl_count )) && (( ! project_has_dc )); then
             connector="└"
           fi
           printf "  %s─ ${C_COMMAND}work-lab${C_RESET}      ${C_DIM}%s${C_RESET}  ${C_PASS}●${C_RESET}  ${C_DIM}%s${C_RESET}\n" "$connector" "${wl_id:0:12}" "${container_name[$wl_id]}"
         done
-        if (( has_devcontainer )); then
+        if (( project_has_dc )); then
           printf "  └─ ${C_DIM}devcontainer${C_RESET}  ${C_DIM}────────────${C_RESET}  ${C_WARN}○${C_RESET}  ${C_WARN}stopped${C_RESET}\n"
         fi
       fi
@@ -633,7 +676,7 @@ cmd_up() {
 
   if ! command -v devcontainer &> /dev/null; then
     status_fail "devcontainer CLI not found"
-    hint "npm install -g @devcontainers/cli"
+    action "Install: ${C_COMMAND}npm install -g @devcontainers/cli${C_ACTION}"
     fail_exit
   fi
 
@@ -642,12 +685,12 @@ cmd_up() {
   project_root=$(find_git_root)
   if [[ -z "$project_root" ]]; then
     status_fail "Not in a git repository"
-    hint "run 'work-lab up' from the root of a git project"
+    action "From git project root: ${C_COMMAND}work-lab start${C_ACTION}"
     fail_exit
   fi
   project_name=$(get_project_name "$project_root")
 
-  banner "work-lab up"
+  banner "work-lab start"
   printf "  ${C_LABEL}project${C_RESET}  ${C_COMMAND}%s${C_RESET}\n" "$project_name"
   printf "  ${C_LABEL}path${C_RESET}     %s\n" "$project_root"
 
@@ -665,6 +708,18 @@ cmd_up() {
     readarray -t -O "${#mount_flags[@]}" mount_flags < <(build_mount_flags)
   fi
 
+  # Check if Docker image is available (local or can be pulled)
+  if ! docker image inspect "$WORK_LAB_IMAGE" &>/dev/null; then
+    echo ""
+    activity "Pulling work-lab image (first run)..."
+    if ! docker pull "$WORK_LAB_IMAGE" 2>&1; then
+      status_fail "Failed to pull Docker image: $WORK_LAB_IMAGE"
+      action "Check network connection and retry"
+      action "Manual pull: ${C_COMMAND}docker pull $WORK_LAB_IMAGE${C_ACTION}"
+      fail_exit
+    fi
+  fi
+
   echo ""
   activity "Starting work-lab container..."
 
@@ -678,29 +733,26 @@ cmd_up() {
     status_fail "work-lab container up failed"
     # detect common errors and give hints
     if [[ "$dc_output" == *"ECONNREFUSED"* ]] || [[ "$dc_output" == *"ETIMEDOUT"* ]]; then
-      hint "Network error - check internet connection"
-      hint "GitHub may be temporarily unreachable"
+      action "Network error - check connection and retry"
     elif [[ "$dc_output" == *"not found"* ]] || [[ "$dc_output" == *"No such"* ]]; then
-      hint "Docker may not be running"
+      action "Docker not running - start Docker Desktop or ${C_COMMAND}dockerd${C_ACTION}"
     fi
     fail_exit
   fi
 
-  echo "$dc_output"
-
   echo ""
   separator
   print_pass "Ready!"
-  hint "work-lab mux   ${C_DIM}(recommended - persistent tmux session)${C_RESET}"
-  hint "work-lab shell ${C_DIM}(one-off commands)${C_RESET}"
+  tip "${C_COMMAND}wl mux${C_TIP}   ${C_DIM}recommended - persistent session${C_TIP}"
+  tip "${C_COMMAND}wl shell${C_TIP} ${C_DIM}one-off commands${C_TIP}"
   printf "  ${C_LABEL}project at${C_RESET} ${C_COMMAND}/workspaces/project${C_RESET}\n"
 
   # Show sidecar mode tips
-  if [[ -d "$project_root/.devcontainer" ]] || [[ -f "$project_root/.devcontainer.json" ]]; then
+  if has_devcontainer "$project_root"; then
     echo ""
     subheader "Sidecar mode detected"
     detail "Project has its own devcontainer for building/testing"
-    tip "Use 'work-lab dc <cmd>' to run commands in project devcontainer"
+    tip "Run in devcontainer: ${C_COMMAND}work-lab dc <cmd>${C_TIP}"
   fi
 }
 
@@ -713,7 +765,7 @@ cmd_shell() {
     local project_name
     project_name=$(basename "$(find_git_root 2>/dev/null)" 2>/dev/null || echo "this project")
     status_fail "No work-lab running for $project_name"
-    hint "Start with: work-lab up"
+    action "Start: ${C_COMMAND}work-lab start${C_ACTION}"
     fail_exit
   fi
 
@@ -750,7 +802,7 @@ cmd_mux() {
     local project_name
     project_name=$(basename "$(find_git_root 2>/dev/null)" 2>/dev/null || echo "this project")
     status_fail "No work-lab running for $project_name"
-    hint "Start with: work-lab up"
+    action "Start: ${C_COMMAND}work-lab start${C_ACTION}"
     fail_exit
   fi
 
@@ -765,12 +817,15 @@ cmd_mux() {
   if ! docker exec "$container_id" command -v "$WORK_LAB_MUX" &>/dev/null; then
     status_fail "$WORK_LAB_MUX not found in container"
     if [[ "$WORK_LAB_MUX" == "zellij" ]]; then
-      hint "install zellij via ~/.config/work-lab/post-create.sh"
+      action "Install zellij in ${C_COMMAND}~/.config/work-lab/post-create.sh${C_ACTION}"
     fi
     fail_exit
   fi
 
   # Get project name for window naming
+  # SECURITY NOTE: project_name comes from user's directory name. Shell injection
+  # via directory names is not a concern - users control their own filesystems,
+  # and anyone who can create malicious directory names already has host access.
   local project_name
   project_name=$(docker exec "$container_id" bash -c 'basename /workspaces/project 2>/dev/null' || echo "project")
 
@@ -787,7 +842,7 @@ cmd_mux() {
       ;;
     *)
       status_fail "Unknown multiplexer: $WORK_LAB_MUX"
-      hint "set WORK_LAB_MUX to 'tmux' or 'zellij'"
+      action "Set ${C_COMMAND}WORK_LAB_MUX=tmux${C_ACTION} or ${C_COMMAND}zellij${C_ACTION}"
       fail_exit
       ;;
   esac
@@ -839,11 +894,10 @@ cmd_dc() {
     else
       status_fail "SSH tunnel not configured"
       echo ""
-      hint "From the HOST, run:"
+      action "From HOST, run:"
       printf "  ${C_COMMAND}wl mux${C_RESET}    (configures tunnel automatically)\n"
       echo ""
-      hint "Then use prefix + S in tmux to access devcontainer"
-      hint "Or run 'wl dc <cmd>' again after tunnel is configured"
+      tip "After setup: ${C_COMMAND}prefix + S${C_TIP} in tmux, or ${C_COMMAND}wl dc <cmd>${C_TIP}"
       fail_exit
     fi
   fi
@@ -909,9 +963,9 @@ cmd_dc() {
 
   if [[ -z "$dc_id" ]]; then
     status_fail "Project devcontainer not running"
-    hint "start the project's devcontainer first"
+    action "Start project devcontainer first"
     if is_inside_container; then
-      tip "Run 'devcontainer up' from host in project directory"
+      action "From host: ${C_COMMAND}devcontainer up${C_ACTION}"
     fi
     fail_exit
   fi
@@ -1063,8 +1117,8 @@ cmd_upgrade() {
   latest=$(_fetch_latest_version) || latest=""
   if [[ -z "$latest" ]]; then
     status_fail "Could not fetch latest version"
-    hint "check your internet connection"
-    hint "https://github.com/modern-tooling/work-lab/releases"
+    action "Check network connection"
+    action "Releases: ${C_COMMAND}https://github.com/modern-tooling/work-lab/releases${C_ACTION}"
     fail_exit
   fi
 
@@ -1095,7 +1149,7 @@ cmd_upgrade() {
     else
       echo ""
       status_fail "Upgrade failed"
-      hint "try running 'brew upgrade work-lab' manually"
+      action "Manual: ${C_COMMAND}brew upgrade work-lab${C_ACTION}"
       fail_exit
     fi
   else
@@ -1105,11 +1159,60 @@ cmd_upgrade() {
     echo ""
     printf "  ${C_COMMAND}curl -fsSL https://raw.githubusercontent.com/modern-tooling/work-lab/main/install.sh | bash${C_RESET}\n"
     echo ""
-    hint "https://github.com/modern-tooling/work-lab#installation"
+    action "Docs: ${C_COMMAND}https://github.com/modern-tooling/work-lab#installation${C_ACTION}"
   fi
 }
 
 cmd_doctor() {
+  # Inside container: show container-specific diagnostics
+  if is_inside_container; then
+    banner "work-lab doctor (inside container)"
+
+    header "Environment"
+    status_ok "Running inside work-lab container"
+
+    # Check workspace mount
+    if [[ -d /workspaces/project ]]; then
+      status_ok "Project mounted at /workspaces/project"
+      if [[ -d /workspaces/project/.git ]]; then
+        local proj_name
+        proj_name=$(basename /workspaces/project)
+        detail "Project: $proj_name"
+      fi
+    else
+      status_fail "No project mounted at /workspaces/project"
+    fi
+
+    # Check multiplexer
+    header "Tools"
+    if command -v tmux &>/dev/null; then
+      status_ok "tmux: $(tmux -V 2>/dev/null || echo 'installed')"
+    else
+      status_warn "tmux: not found"
+    fi
+    if command -v zellij &>/dev/null; then
+      status_ok "zellij: $(zellij --version 2>/dev/null || echo 'installed')"
+    fi
+
+    # Check SSH tunnel to devcontainer
+    header "Sidecar Connection"
+    if [[ -f /workspaces/project/.work-lab/ssh-key ]] && [[ -f /workspaces/project/.work-lab/ip ]]; then
+      local dc_ip dc_user
+      dc_ip=$(cat /workspaces/project/.work-lab/ip 2>/dev/null)
+      dc_user=$(cat /workspaces/project/.work-lab/user 2>/dev/null || echo "vscode")
+      status_ok "SSH tunnel configured"
+      detail "Target: $dc_user@$dc_ip"
+      tip "Connect to devcontainer: ${C_COMMAND}dc-ssh${C_TIP}"
+    else
+      status_info "No SSH tunnel configured"
+      detail "Project may not have a devcontainer, or tunnel not set up"
+    fi
+
+    echo ""
+    print_pass "Inside container. Run 'work-lab doctor' on host for full diagnostics."
+    return 0
+  fi
+
   local container_id config_dir errors=0
   local mount_spec src_path tgt_path
 
@@ -1119,7 +1222,7 @@ cmd_doctor() {
   header "Updates"
   if check_for_update; then
     status_warn "v$UPDATE_LATEST_VERSION available (current: v$VERSION)"
-    hint "work-lab upgrade"
+    action "Update: ${C_COMMAND}work-lab upgrade${C_ACTION}"
   else
     status_ok "up to date (v$VERSION)"
   fi
@@ -1140,7 +1243,7 @@ cmd_doctor() {
     status_ok "wl command available"
   else
     status_info "wl alias not set"
-    hint "add to ~/.bashrc or ~/.zshrc: alias wl='work-lab'"
+    tip "Add to shell: ${C_COMMAND}alias wl='work-lab'${C_TIP}"
   fi
 
   # check dependencies
@@ -1152,20 +1255,20 @@ cmd_doctor() {
       status_ok "docker daemon: running"
     else
       status_fail "docker daemon: not running"
-      hint "start Docker Desktop or dockerd"
-      ((errors++))
+      action "Start Docker Desktop or ${C_COMMAND}dockerd${C_ACTION}"
+      ((errors++)) || true
     fi
   else
     status_fail "docker: not found"
-    hint "install from https://docs.docker.com/get-docker/"
-    ((errors++))
+    action "Install: ${C_COMMAND}https://docs.docker.com/get-docker/${C_ACTION}"
+    ((errors++)) || true
   fi
   if command -v devcontainer &>/dev/null; then
     status_ok "devcontainer CLI: $(devcontainer --version 2>/dev/null || echo 'installed')"
   else
     status_fail "devcontainer CLI: not found"
-    hint "npm install -g @devcontainers/cli"
-    ((errors++))
+    action "Install: ${C_COMMAND}npm install -g @devcontainers/cli${C_ACTION}"
+    ((errors++)) || true
   fi
 
   # check container status
@@ -1176,7 +1279,7 @@ cmd_doctor() {
       status_ok "running (id: ${container_id:0:12})"
     else
       status_info "not running"
-      hint "work-lab up"
+      action "Run ${C_COMMAND}work-lab start${C_ACTION}"
     fi
   else
     status_skip "cannot check (docker not available)"
@@ -1201,7 +1304,7 @@ cmd_doctor() {
     detail "$git_root"
   else
     status_warn "not in a git repository"
-    hint "run 'work-lab up' from within a git project"
+    action "From git project: ${C_COMMAND}work-lab start${C_ACTION}"
   fi
 
   # validate configured mounts
@@ -1214,7 +1317,7 @@ cmd_doctor() {
       for mount_spec in "${WORK_LAB_MOUNTS_RO[@]}"; do
         if [[ "$mount_spec" != *:* ]]; then
           status_fail "invalid format (missing colon): $mount_spec"
-          ((errors++))
+          ((errors++)) || true
           continue
         fi
         src_path="${mount_spec%%:*}"
@@ -1227,7 +1330,7 @@ cmd_doctor() {
             status_ok "$src_path ${ICON_ARROW} $tgt_path (ro)"
           else
             status_fail "$src_path ${ICON_ARROW} $tgt_path (ro) - not readable"
-            ((errors++))
+            ((errors++)) || true
           fi
         else
           status_warn "$src_path ${ICON_ARROW} $tgt_path (ro) - source not found"
@@ -1239,7 +1342,7 @@ cmd_doctor() {
       for mount_spec in "${WORK_LAB_MOUNTS_RW[@]}"; do
         if [[ "$mount_spec" != *:* ]]; then
           status_fail "invalid format (missing colon): $mount_spec"
-          ((errors++))
+          ((errors++)) || true
           continue
         fi
         src_path="${mount_spec%%:*}"
@@ -1252,7 +1355,7 @@ cmd_doctor() {
             status_ok "$src_path ${ICON_ARROW} $tgt_path (rw)"
           else
             status_fail "$src_path ${ICON_ARROW} $tgt_path (rw) - not readable/writable"
-            ((errors++))
+            ((errors++)) || true
           fi
         else
           status_warn "$src_path ${ICON_ARROW} $tgt_path (rw) - source not found"
@@ -1289,7 +1392,7 @@ cmd_doctor() {
   # mode detection and sidecar status
   header "Mode"
   if [[ -n "$git_root" ]]; then
-    if [[ -d "$git_root/.devcontainer" ]] || [[ -f "$git_root/.devcontainer.json" ]]; then
+    if has_devcontainer "$git_root"; then
       status_info "Sidecar mode"
       detail "Project has devcontainer - work-lab runs alongside it"
 
@@ -1301,19 +1404,19 @@ cmd_doctor() {
 
         if [[ -n "$dc_id" ]]; then
           status_ok "project devcontainer: running (${dc_id:0:12})"
-          tip "Use 'work-lab dc <cmd>' to run commands in project devcontainer"
+          tip "Run in devcontainer: ${C_COMMAND}work-lab dc <cmd>${C_TIP}"
 
           # check if SSH tunnel credentials exist (shared filesystem approach)
           if check_project_ssh_tunnel "$git_root"; then
             status_ok "SSH tunnel: configured"
-            tip "Use 'prefix + S' in tmux to SSH into devcontainer"
+            tip "SSH to devcontainer: ${C_COMMAND}prefix + S${C_TIP} in tmux"
           else
             status_info "SSH tunnel: not configured"
-            hint "see docs/ssh-tunneling.md for setup"
+            action "Setup: ${C_COMMAND}docs/ssh-tunneling.md${C_ACTION}"
           fi
         else
           status_warn "project devcontainer: not running"
-          hint "devcontainer up --workspace-folder $git_root"
+          action "Start: ${C_COMMAND}devcontainer up --workspace-folder $git_root${C_ACTION}"
         fi
       fi
     else
@@ -1328,18 +1431,18 @@ cmd_doctor() {
   echo ""
   separator
   if (( errors > 0 )); then
-    print_fail "Found $errors error(s). Fix them before running 'work-lab up'."
+    print_fail "Found $errors error(s). Fix them before running 'work-lab start'."
     INTENTIONAL_EXIT=1
     return 1
   else
-    print_pass "All checks passed. Ready to run 'work-lab up'."
+    print_pass "All checks passed. Ready to run 'work-lab start'."
     return 0
   fi
 }
 
 # Main
 case "${1:-}" in
-  up)
+  start|up)
     cmd_up
     ;;
   shell)
@@ -1349,7 +1452,7 @@ case "${1:-}" in
   mux|tmux)
     cmd_mux
     ;;
-  stop)
+  stop|down)
     cmd_stop
     ;;
   ps)

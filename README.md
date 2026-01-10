@@ -11,7 +11,7 @@ A container-based lab for humans and AI coding agents to think, plan, code, and 
 - **Works with devcontainers** - Run alongside any project's devcontainer via SSH tunnel
 - **Zero project changes** - Never modifies your repos
 - **Safe agent execution** - Run `claude --dangerously-skip-permissions` without the danger
-- **One command** - `wl up && wl mux` and you're in
+- **One command** - `wl start && wl mux` and you're in
 
 ## TL;DR
 
@@ -95,7 +95,7 @@ export PATH="$PATH:$HOME/.local/share/work-lab/bin"
 ```bash
 cd /path/to/your/project     # Any git repository
 work-lab doctor              # Check your environment
-work-lab up                  # Start the container
+work-lab start               # Start the container
 work-lab mux                 # Attach to tmux session (or zellij if configured)
 ```
 
@@ -109,7 +109,7 @@ claude                       # or gt (gastown), opencode, aider, etc.
 ### Helper commands
 
 ```bash
-work-lab up       # Start the devcontainer
+work-lab start    # Start the container
 work-lab shell    # Attach an interactive shell
 work-lab mux      # Attach to multiplexer (tmux default, or zellij)
 work-lab stop     # Stop the container
@@ -127,7 +127,7 @@ alias wl='work-lab'
 Then use:
 
 ```bash
-wl up      # Same as: work-lab up
+wl start   # Same as: work-lab start
 wl mux     # Same as: work-lab mux
 ```
 
@@ -227,7 +227,7 @@ gt                           # Start Gastown orchestrator
 
 ### Project mounting
 
-When you run `work-lab up` from any git repository, your project is automatically mounted to `/workspaces/project` in the container. No configuration needed for basic usage.
+When you run `work-lab start` from any git repository, your project is automatically mounted to `/workspaces/project` in the container. No configuration needed for basic usage.
 
 ### User customization
 

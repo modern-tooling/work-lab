@@ -82,6 +82,7 @@ ICON_INFO="ℹ"
 ICON_SKIP="─"
 ICON_ARROW="→"
 ICON_DOT="•"
+ICON_TIP="*"
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Semantic color aliases (use these in code for clarity)
@@ -94,7 +95,8 @@ C_SUCCESS="$C_PASS"       # success messages
 C_ERROR="$C_FAIL"         # error messages
 C_WARNING="$C_WARN"       # warning messages
 C_MUTED="$C_DIM"          # muted/secondary text
-C_TIP="$C_ACCENT"         # tips and suggestions
+C_TIP="$C_CYAN"           # tips: enlighten user about features
+C_ACTION="$C_WARN"        # actions: instruct user what to do next
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Styled output functions
@@ -156,12 +158,33 @@ detail() {
   printf "    ${C_DIM}%s${C_RESET}\n" "$*"
 }
 
-# Hint/suggestion
-hint() {
-  printf "  ${C_DIM}${ICON_ARROW}${C_RESET} ${C_ACCENT}%s${C_RESET}\n" "$*"
+# ─────────────────────────────────────────────────────────────────────────────
+# Tips vs Actions
+# ─────────────────────────────────────────────────────────────────────────────
+# TIP: Enlightens and inspires. Shows users cool features they might not know.
+#      Use sparingly for "did you know?" moments that add value.
+#      Icon: * (asterisk)  Color: cyan (C_TIP)
+#      Example: "SSH to devcontainer: prefix + S in tmux"
+#
+# ACTION: Instructs user what to do next. Error recovery, next steps, fixes.
+#         Use when user needs to take action to proceed or resolve an issue.
+#         Icon: → (arrow)  Color: amber/gold (C_ACTION)
+#         Example: "Run work-lab start"
+# ─────────────────────────────────────────────────────────────────────────────
+
+# Tip - enlighten user about a feature or capability
+# Use for "did you know?" moments, not for instructions
+tip() {
+  printf "  ${C_TIP}${ICON_TIP} %b${C_RESET}\n" "$*"
 }
 
-# Tip (for advanced suggestions) - uses brackets to stand out
-tip() {
-  printf "  ${C_TIP}[tip]${C_RESET} %s\n" "$*"
+# Action - instruct user what to do next
+# Use for error recovery, next steps, required actions
+action() {
+  printf "  ${C_ACTION}${ICON_ARROW} %b${C_RESET}\n" "$*"
+}
+
+# Alias for backwards compatibility (maps to action since most hints were instructions)
+hint() {
+  action "$@"
 }
