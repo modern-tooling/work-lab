@@ -42,7 +42,7 @@ jobs:
       - name: Test Docker build (${{ matrix.platform }})
         uses: docker/build-push-action@v5
         with:
-          context: .devcontainer
+          context: .
           file: .devcontainer/Dockerfile
           platforms: ${{ matrix.platform }}
           push: false
