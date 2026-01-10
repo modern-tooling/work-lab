@@ -30,6 +30,9 @@ if [[ -n "$TMUX" && "$TMUX_PANE" == "%0" ]]; then
       printf '  \e[38;2;200;200;200mvscode:\e[0m code <file>  \e[38;2;140;150;160m# opens in host VS Code\e[0m\n'
     fi
     printf '\n'
+    printf '  \e[38;2;200;200;200mai:\e[0m   gastown  \e[38;2;140;150;160m# start AI coding agent\e[0m\n'
+    printf '        claude   \e[38;2;140;150;160m# start Claude Code\e[0m\n'
+    printf '\n'
   fi
   unset _wl_session _wl_guide
 fi

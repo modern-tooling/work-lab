@@ -1,4 +1,30 @@
 #!/bin/bash
 # work-lab project name for tmux status bar
+# Gets the actual project folder name from the host (not just "project")
 
-basename /workspaces/project 2>/dev/null || echo "project"
+# Method 1: Get from docker container label (most accurate)
+if command -v docker &>/dev/null; then
+  # Get our container ID from hostname (docker sets hostname to short container ID)
+  container_id=$(hostname)
+  if [[ ${#container_id} -eq 12 ]]; then
+    local_folder=$(docker inspect --format '{{index .Config.Labels "devcontainer.local_folder"}}' "$container_id" 2>/dev/null)
+    if [[ -n "$local_folder" ]]; then
+      basename "$local_folder"
+      exit 0
+    fi
+  fi
+fi
+
+# Method 2: Get from git remote URL
+if [[ -d /workspaces/project/.git ]]; then
+  remote_url=$(git -C /workspaces/project config --get remote.origin.url 2>/dev/null)
+  if [[ -n "$remote_url" ]]; then
+    # Extract repo name from URL (handles both https and ssh)
+    repo_name=$(basename "$remote_url" .git)
+    echo "$repo_name"
+    exit 0
+  fi
+fi
+
+# Fallback: just use "project"
+echo "project"
