@@ -359,6 +359,19 @@ find_container() {
   project_root=$(find_git_root 2>/dev/null) || { echo ""; return 0; }
 
   local cid
+
+  # First, try to find by work-lab.container label (new containers)
+  while read -r cid; do
+    [[ -z "$cid" ]] && continue
+    local mount_source
+    mount_source=$(docker inspect "$cid" --format '{{range .Mounts}}{{if eq .Destination "/workspaces/project"}}{{.Source}}{{end}}{{end}}' 2>/dev/null)
+    if [[ "$mount_source" == "$project_root" ]]; then
+      echo "$cid"
+      return 0
+    fi
+  done < <(docker ps -q --filter "label=work-lab.container=true" 2>/dev/null)
+
+  # Fallback: check legacy containers (local_folder pointing to work-lab repo)
   while read -r cid; do
     [[ -z "$cid" ]] && continue
     local mount_source
@@ -523,9 +536,10 @@ cmd_ps() {
   header "Running containers"
 
   # Get all running devcontainers
+  # Include work-lab.container label to distinguish work-lab containers
   local containers
   containers=$(docker ps --filter "label=devcontainer.local_folder" \
-    --format "{{.ID}}|{{.Names}}|{{.Label \"devcontainer.local_folder\"}}|{{.Status}}" 2>/dev/null)
+    --format "{{.ID}}|{{.Names}}|{{.Label \"devcontainer.local_folder\"}}|{{.Status}}|{{.Label \"work-lab.container\"}}" 2>/dev/null)
 
   if [[ -z "$containers" ]]; then
     status_info "none running"
@@ -540,11 +554,13 @@ cmd_ps() {
   declare -A container_name  # container_id -> name
   declare -a projects  # ordered list of projects
 
-  while IFS='|' read -r cid cname local_folder _status; do
+  while IFS='|' read -r cid cname local_folder _status is_worklab; do
     container_name["$cid"]="$cname"
 
     # Check if this is a work-lab container
-    if [[ "$local_folder" == *"/work-lab" ]] || [[ "$local_folder" == "$REPO_DIR" ]]; then
+    # New containers have work-lab.container=true label
+    # Legacy containers have local_folder pointing to work-lab repo
+    if [[ "$is_worklab" == "true" ]] || [[ "$local_folder" == *"/work-lab" ]] || [[ "$local_folder" == "$REPO_DIR" ]]; then
       # Find the mounted project path
       local project_mount
       project_mount=$(docker inspect "$cid" --format '{{range .Mounts}}{{if eq .Destination "/workspaces/project"}}{{.Source}}{{end}}{{end}}' 2>/dev/null)
@@ -749,8 +765,15 @@ cmd_up() {
   activity "Starting work-lab container..."
 
   # Run devcontainer up with error handling
+  # Use --config to specify work-lab's devcontainer.json
+  # Use --workspace-folder for the actual project (sets devcontainer.local_folder label)
+  # Use --id-label to mark this as a work-lab container (for wl ps detection)
   local dc_output dc_exit=0
-  dc_output=$(devcontainer up --workspace-folder "$REPO_DIR" "${mount_flags[@]}" 2>&1) || dc_exit=$?
+  dc_output=$(devcontainer up \
+    --config "$REPO_DIR/.devcontainer/devcontainer.json" \
+    --workspace-folder "$project_root" \
+    --id-label "work-lab.container=true" \
+    "${mount_flags[@]}" 2>&1) || dc_exit=$?
 
   if (( dc_exit != 0 )); then
     echo "$dc_output"
