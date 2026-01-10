@@ -1,0 +1,53 @@
+#!/bin/bash
+# work-lab combined right status for tmux
+# Outputs: git · dc · time (with proper separators, hiding empty segments)
+# Colors are handled by tmux format strings
+
+# Colors (for reference, actual coloring in tmux.conf)
+# sky_blue=#64a0dc (git)
+# gold=#ffd23c (dc)
+# dim=#8c969f (time, separators)
+# sep=#3a3f4a (separator color)
+
+segments=()
+
+# Git status
+cd /workspaces/project 2>/dev/null
+branch=$(git symbolic-ref --short HEAD 2>/dev/null || git rev-parse --short HEAD 2>/dev/null)
+if [[ -n "$branch" ]]; then
+  [[ ${#branch} -gt 20 ]] && branch="${branch:0:17}..."
+  if git diff --quiet 2>/dev/null && git diff --cached --quiet 2>/dev/null; then
+    segments+=("#[fg=#64a0dc] $branch#[default]")
+  else
+    segments+=("#[fg=#64a0dc] $branch ●#[default]")
+  fi
+fi
+
+# DC status (only if docker available and paired dc running)
+if command -v docker &>/dev/null; then
+  project_name=$(basename /workspaces/project 2>/dev/null)
+  while IFS= read -r container_id; do
+    [[ -z "$container_id" ]] && continue
+    container_name=$(docker inspect --format '{{.Name}}' "$container_id" 2>/dev/null | tr -d '/')
+    [[ "$container_name" == *"work-lab"* ]] && continue
+    local_folder=$(docker inspect --format '{{index .Config.Labels "devcontainer.local_folder"}}' "$container_id" 2>/dev/null)
+    folder_name=$(basename "$local_folder" 2>/dev/null)
+    if [[ "$folder_name" == "$project_name" ]]; then
+      segments+=("#[fg=#ffd23c]⚡ dc#[default]")
+      break
+    fi
+  done < <(docker ps --filter "label=devcontainer.local_folder" --format '{{.ID}}' 2>/dev/null)
+fi
+
+# Time (always shown)
+segments+=("#[fg=#8c969f]󰥔 $(date +%H:%M)#[default]")
+
+# Join with dim separators
+sep="#[fg=#3a3f4a] · #[default]"
+result=""
+for i in "${!segments[@]}"; do
+  [[ $i -gt 0 ]] && result+="$sep"
+  result+="${segments[$i]}"
+done
+
+echo "$result "
