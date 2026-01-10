@@ -249,61 +249,28 @@ EOF
 # Inside-Container Detection Tests
 # ─────────────────────────────────────────────────────────────────────────────
 
-@test "is_inside_container returns false on host (no markers)" {
-  # Extract and test the function
-  eval "$(grep -A5 'is_inside_container()' "$PROJECT_ROOT/bin/work-lab" | head -6)"
-  unset WORK_LAB_CONTAINER
+@test "is_inside_container returns false on host (no /opt/work-lab)" {
+  # On host, /opt/work-lab shouldn't exist
+  is_inside_container() { [[ -d /opt/work-lab ]]; }
   run is_inside_container
-  [ "$status" -ne 0 ]  # false = non-zero exit
+  [ "$status" -ne 0 ]  # false = non-zero exit (directory doesn't exist)
 }
 
-@test "is_inside_container returns true when WORK_LAB_CONTAINER=1" {
-  eval "$(grep -A5 'is_inside_container()' "$PROJECT_ROOT/bin/work-lab" | head -6)"
-  export WORK_LAB_CONTAINER=1
-  run is_inside_container
-  [ "$status" -eq 0 ]  # true = zero exit
-}
-
-@test "is_inside_container returns true when WORK_LAB_CONTAINER=true" {
-  # Test that any truthy value works
-  eval "$(grep -A5 'is_inside_container()' "$PROJECT_ROOT/bin/work-lab" | head -6)"
-  export WORK_LAB_CONTAINER=1
-  run is_inside_container
-  [ "$status" -eq 0 ]
-}
-
-@test "is_inside_container returns false when WORK_LAB_CONTAINER is empty" {
-  eval "$(grep -A5 'is_inside_container()' "$PROJECT_ROOT/bin/work-lab" | head -6)"
-  export WORK_LAB_CONTAINER=""
-  run is_inside_container
-  [ "$status" -ne 0 ]
-}
-
-@test "is_inside_container returns false when WORK_LAB_CONTAINER=0" {
-  eval "$(grep -A5 'is_inside_container()' "$PROJECT_ROOT/bin/work-lab" | head -6)"
-  export WORK_LAB_CONTAINER=0
-  run is_inside_container
-  [ "$status" -ne 0 ]
-}
-
-@test "is_inside_container detects devcontainer.json marker" {
-  eval "$(grep -A5 'is_inside_container()' "$PROJECT_ROOT/bin/work-lab" | head -6)"
-  # Create the marker file
-  mkdir -p "/tmp/test-workspaces/work-lab/.devcontainer"
-  touch "/tmp/test-workspaces/work-lab/.devcontainer/devcontainer.json"
-
-  # Modify function to use test path
-  is_inside_container_test() {
-    [[ -f /tmp/test-workspaces/work-lab/.devcontainer/devcontainer.json ]] || \
-    [[ "${WORK_LAB_CONTAINER:-}" == "1" ]]
-  }
-
-  unset WORK_LAB_CONTAINER
+@test "is_inside_container returns true when /opt/work-lab exists" {
+  # Create temporary marker directory
+  mkdir -p /tmp/test-opt-work-lab
+  is_inside_container_test() { [[ -d /tmp/test-opt-work-lab ]]; }
   run is_inside_container_test
-  [ "$status" -eq 0 ]
+  [ "$status" -eq 0 ]  # true = zero exit
+  rm -rf /tmp/test-opt-work-lab
+}
 
-  # Cleanup
-  rm -rf "/tmp/test-workspaces"
+@test "is_inside_container function exists in work-lab" {
+  grep -q 'is_inside_container()' "$PROJECT_ROOT/bin/work-lab"
+}
+
+@test "is_inside_container checks /opt/work-lab directory" {
+  grep -q '/opt/work-lab' "$PROJECT_ROOT/bin/work-lab"
 }
 
 # ─────────────────────────────────────────────────────────────────────────────

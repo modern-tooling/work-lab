@@ -102,12 +102,9 @@ export WORK_LAB_IMAGE
 # Container detection
 # ─────────────────────────────────────────────────────────────────────────────
 # Check if running inside work-lab container
-# SECURITY NOTE: Environment variable can be spoofed, but this only causes
-# misleading errors - no privilege escalation. Anyone with host access can
-# already docker exec into any container.
+# Detection: /opt/work-lab exists only inside the container image
 is_inside_container() {
-  [[ -f /workspaces/work-lab/.devcontainer/devcontainer.json ]] || \
-  [[ "${WORK_LAB_CONTAINER:-}" == "1" ]]
+  [[ -d /opt/work-lab ]]
 }
 
 # Require running outside container (for host-only commands)

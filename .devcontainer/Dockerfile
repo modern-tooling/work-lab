@@ -76,12 +76,20 @@ USER worklab
 RUN go install github.com/steveyegge/gastown/cmd/gt@latest
 USER root
 
-# Copy worklab user configs
-COPY home/ /home/worklab/
+# Copy worklab user configs (context is repo root)
+COPY .devcontainer/home/ /home/worklab/
 RUN chown -R worklab:worklab /home/worklab
 
-# Copy post-create and post-start scripts to fixed location
-COPY post-create.sh post-start.sh /opt/work-lab/
+# Install work-lab CLI from GitHub (works inside container too)
+RUN mkdir -p /opt/work-lab/bin /opt/work-lab/lib && \
+    curl -fsSL https://raw.githubusercontent.com/modern-tooling/work-lab/main/bin/work-lab -o /opt/work-lab/bin/work-lab && \
+    curl -fsSL https://raw.githubusercontent.com/modern-tooling/work-lab/main/lib/style.sh -o /opt/work-lab/lib/style.sh && \
+    chmod +x /opt/work-lab/bin/work-lab && \
+    sed -i 's|readonly REPO_DIR=.*|readonly REPO_DIR="/opt/work-lab"|' /opt/work-lab/bin/work-lab && \
+    ln -sf /opt/work-lab/bin/work-lab /home/worklab/bin/work-lab
+
+# Copy post-create and post-start scripts
+COPY .devcontainer/post-create.sh .devcontainer/post-start.sh /opt/work-lab/
 RUN chmod +x /opt/work-lab/*.sh
 
 USER worklab
