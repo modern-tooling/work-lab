@@ -1307,6 +1307,50 @@ cmd_doctor() {
     status_skip "cannot check (docker not available)"
   fi
 
+  # check Docker image for updates
+  header "Docker image"
+  if command -v docker &>/dev/null && docker info &>/dev/null; then
+    # Get local image info
+    local local_digest local_created
+    local_digest=$(docker images --digests --format "{{.Digest}}" "$WORK_LAB_IMAGE" 2>/dev/null | head -1)
+    local_created=$(docker images --format "{{.CreatedSince}}" "$WORK_LAB_IMAGE" 2>/dev/null | head -1)
+
+    if [[ -z "$local_digest" ]]; then
+      status_info "not pulled yet"
+      action "Run ${C_COMMAND}work-lab start${C_ACTION} to pull image"
+    elif [[ "$fix_mode" == "true" ]]; then
+      # --fix mode: check for updates by pulling
+      activity "checking for updates..."
+      local pull_output
+      if pull_output=$(docker pull "$WORK_LAB_IMAGE" 2>&1); then
+        if echo "$pull_output" | grep -q "Image is up to date"; then
+          status_ok "up to date"
+          detail "$WORK_LAB_IMAGE"
+        elif echo "$pull_output" | grep -q "Downloaded newer image\|Pull complete"; then
+          status_ok "updated to latest"
+          detail "New image pulled"
+          if [[ -n "$(find_container)" ]]; then
+            action "Rebuild: ${C_COMMAND}work-lab rebuild${C_ACTION}"
+          fi
+          ((fixes_applied++)) || true
+        else
+          status_ok "checked"
+          detail "$WORK_LAB_IMAGE"
+        fi
+      else
+        status_warn "could not check for updates"
+        detail "Network or registry issue"
+      fi
+    else
+      # Normal mode: just show current image info
+      status_ok "present (pulled $local_created)"
+      detail "$WORK_LAB_IMAGE"
+      tip "Check for updates: ${C_COMMAND}work-lab doctor --fix${C_TIP}"
+    fi
+  else
+    status_skip "cannot check (docker not available)"
+  fi
+
   # show and validate configuration
   header "Configuration"
   config_dir="$HOME/.config/work-lab"
