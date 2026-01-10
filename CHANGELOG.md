@@ -6,6 +6,15 @@ All notable changes to work-lab will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.9.0] - 2026-01-10
+
+### Fixed
+
+- **Devcontainer detection**: Now correctly finds paired devcontainer when work-lab is also running
+- **tmux status bar**: Simplified config, no longer requires Nerd Fonts
+- **`wl start` auto-update**: Rebuilds container if newer image is locally available
+- **`wl doctor` fast check**: Compares running container vs pulled image (instant, no network)
+
 ## [0.8.0] - 2026-01-10
 
 ### Added
@@ -173,6 +182,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Manual clone
 - Installed tools: tmux, git, curl, jq, ripgrep, fzf, Node.js 22 LTS, Claude CLI, Gastown, Beads
 
+[0.9.0]: https://github.com/modern-tooling/work-lab/releases/tag/v0.9.0
 [0.8.0]: https://github.com/modern-tooling/work-lab/releases/tag/v0.8.0
 [0.7.1]: https://github.com/modern-tooling/work-lab/releases/tag/v0.7.1
 [0.7.0]: https://github.com/modern-tooling/work-lab/releases/tag/v0.7.0
