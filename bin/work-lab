@@ -1226,7 +1226,14 @@ cmd_doctor() {
   fi
 
   # check for wl alias/command
+  # Note: command -v doesn't see aliases, so check shell configs too
+  local wl_found=false
   if command -v wl &>/dev/null; then
+    wl_found=true
+  elif grep -q "alias wl=" "$HOME/.bashrc" "$HOME/.zshrc" "$HOME/.bash_aliases" 2>/dev/null; then
+    wl_found=true
+  fi
+  if [[ "$wl_found" == "true" ]]; then
     status_ok "wl command available"
   else
     status_info "wl alias not set"
