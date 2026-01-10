@@ -765,18 +765,16 @@ cmd_up() {
   fi
 
   echo ""
-  separator
   print_pass "Ready!"
   tip "${C_COMMAND}wl mux${C_TIP}   ${C_DIM}recommended - persistent session${C_TIP}"
   tip "${C_COMMAND}wl shell${C_TIP} ${C_DIM}one-off commands${C_TIP}"
-  printf "  ${C_LABEL}project at${C_RESET} ${C_COMMAND}/workspaces/project${C_RESET}\n"
 
   # Show sidecar mode tips
   if has_devcontainer "$project_root"; then
     echo ""
     subheader "Sidecar mode detected"
     detail "Project has its own devcontainer for building/testing"
-    tip "Run in devcontainer: ${C_COMMAND}work-lab dc <cmd>${C_TIP}"
+    printf "  ${C_DIM}To run in paired devcontainer:${C_RESET} ${C_COMMAND}wl dc <cmd>${C_RESET}\n"
   fi
 }
 
@@ -857,8 +855,9 @@ cmd_mux() {
   case "$WORK_LAB_MUX" in
     tmux)
       # Create or attach, then rename first window to project name
+      # Use -d to start detached, then attach - avoids garbage output on creation
       docker exec -it -u worklab -w /workspaces/project "$container_id" \
-        bash -c "tmux attach -t lab 2>/dev/null || (tmux new -s lab -n '$project_name')"
+        bash -c "tmux has-session -t lab 2>/dev/null || tmux new-session -d -s lab -n '$project_name'; tmux attach -t lab"
       ;;
     zellij)
       docker exec -it -u worklab -w /workspaces/project "$container_id" \
@@ -1427,7 +1426,7 @@ cmd_doctor() {
 
         if [[ -n "$dc_id" ]]; then
           status_ok "project devcontainer: running (${dc_id:0:12})"
-          tip "Run in devcontainer: ${C_COMMAND}work-lab dc <cmd>${C_TIP}"
+          printf "  ${C_DIM}To run in paired devcontainer:${C_RESET} ${C_COMMAND}wl dc <cmd>${C_RESET}\n"
 
           # check if SSH tunnel credentials exist (shared filesystem approach)
           if check_project_ssh_tunnel "$git_root"; then
