@@ -1,0 +1,4 @@
+#!/bin/bash
+# work-lab project name for tmux status bar
+
+basename /workspaces/project 2>/dev/null || echo "project"
