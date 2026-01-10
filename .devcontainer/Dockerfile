@@ -60,14 +60,20 @@ RUN ARCH=$(dpkg --print-architecture) && \
     ln -s /usr/local/go/bin/go /usr/local/bin/go && \
     ln -s /usr/local/go/bin/gofmt /usr/local/bin/gofmt
 
-# Install beads and gastown (AI coding agent tools)
+# Install beads (bd) from pre-built binary
+# https://github.com/steveyegge/beads/releases
+RUN ARCH=$(dpkg --print-architecture) && \
+    curl -fsSL "https://github.com/steveyegge/beads/releases/download/v0.46.0/beads_0.46.0_linux_${ARCH}.tar.gz" | tar -xzf - -C /tmp && \
+    mv /tmp/bd /usr/local/bin/bd && \
+    chmod +x /usr/local/bin/bd
+
+# Install gastown (gt) - AI coding agent orchestrator
 # Requires Go 1.24+ and tmux (all installed above)
 ENV GOPATH=/home/worklab/go
 ENV PATH="${PATH}:/home/worklab/go/bin"
 RUN mkdir -p /home/worklab/go && chown worklab:worklab /home/worklab/go
 USER worklab
-RUN go install github.com/steveyegge/beads@latest && \
-    go install github.com/steveyegge/gastown/cmd/gt@latest
+RUN go install github.com/steveyegge/gastown/cmd/gt@latest
 USER root
 
 # Copy worklab user configs
