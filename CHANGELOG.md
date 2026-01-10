@@ -6,6 +6,25 @@ All notable changes to work-lab will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.1] - 2026-01-10
+
+### Added
+
+- **Unified `wl` command**: Works both on host AND inside container
+  - Inside container: installed from GitHub at `/opt/work-lab`
+  - Detection via `/opt/work-lab` directory
+- **Context-aware help**: Host-only commands dimmed when inside container
+
+### Changed
+
+- **Claude authentication**: `.claude` mount changed to read-write for persistent login
+- **Tmux status bar**: tmux2k-inspired design with Nerd Font icons and rounded pills
+- **Help styling**: Consistent colors matching beads (command cyan, description white)
+
+### Fixed
+
+- **Welcome guide**: Now shows in first tmux pane (fixed window:pane detection)
+
 ## [0.7.0] - 2026-01-09
 
 ### Added
@@ -151,6 +170,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Manual clone
 - Installed tools: tmux, git, curl, jq, ripgrep, fzf, Node.js 22 LTS, Claude CLI, Gastown, Beads
 
+[0.7.1]: https://github.com/modern-tooling/work-lab/releases/tag/v0.7.1
 [0.7.0]: https://github.com/modern-tooling/work-lab/releases/tag/v0.7.0
 [0.6.0]: https://github.com/modern-tooling/work-lab/releases/tag/v0.6.0
 [0.5.0]: https://github.com/modern-tooling/work-lab/releases/tag/v0.5.0
