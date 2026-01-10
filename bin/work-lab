@@ -667,7 +667,7 @@ cmd_up() {
   fi
 
   echo ""
-  activity "Starting devcontainer..."
+  activity "Starting work-lab container..."
 
   # Run devcontainer up with error handling
   local dc_output dc_exit=0
