@@ -198,8 +198,18 @@ build_mount_flags() {
 }
 
 usage() {
+  # Context-aware colors: dim commands that don't work in current environment
+  local HOST_CMD="$C_COMMAND"      # commands requiring host
+  local BOTH_CMD="$C_COMMAND"      # commands that work everywhere
+  local inside=""
+
+  if is_inside_container; then
+    HOST_CMD="$C_DIM"  # dim host-only commands when inside
+    inside=" ${C_DIM}(inside container)${C_RESET}"
+  fi
+
   echo ""
-  print_bold "work-lab"
+  printf "${C_BOLD}work-lab${C_RESET}%s\n" "$inside"
   print_dim "containerized environment for AI coding agents"
   echo ""
   print_accent "Usage:"
@@ -207,33 +217,33 @@ usage() {
   echo ""
   print_accent "Commands:"
   echo ""
-  # Lifecycle commands
+  # Lifecycle commands (host-only)
   printf "  ${C_PRIMARY}Lifecycle${C_RESET}\n"
-  printf "    ${C_COMMAND}%-14s${C_RESET} %s\n" "start" "Start work-lab for the current git project"
-  printf "    ${C_COMMAND}%-14s${C_RESET} %s\n" "stop" "Stop the container"
-  printf "    ${C_COMMAND}%-14s${C_RESET} %s\n" "rebuild" "Stop, remove, and start fresh"
+  printf "    ${HOST_CMD}%-14s${C_RESET} ${HOST_CMD}%s${C_RESET}\n" "start" "Start work-lab for the current git project"
+  printf "    ${HOST_CMD}%-14s${C_RESET} ${HOST_CMD}%s${C_RESET}\n" "stop" "Stop the container"
+  printf "    ${HOST_CMD}%-14s${C_RESET} ${HOST_CMD}%s${C_RESET}\n" "rebuild" "Stop, remove, and start fresh"
   echo ""
-  # Session commands
+  # Session commands (mostly host-only)
   printf "  ${C_PRIMARY}Session${C_RESET}\n"
-  printf "    ${C_COMMAND}%-14s${C_RESET} Attach to tmux session ${C_DIM}(recommended)${C_RESET}\n" "mux [project]"
-  printf "    ${C_COMMAND}%-14s${C_RESET} %s\n" "shell" "Run a one-off shell command"
-  printf "    ${C_COMMAND}%-14s${C_RESET} %s\n" "ps" "List running work-lab containers"
+  printf "    ${HOST_CMD}%-14s${C_RESET} ${HOST_CMD}Attach to tmux session${C_RESET} ${C_DIM}(recommended)${C_RESET}\n" "mux [project]"
+  printf "    ${BOTH_CMD}%-14s${C_RESET} %s\n" "shell" "Run a one-off shell command"
+  printf "    ${HOST_CMD}%-14s${C_RESET} ${HOST_CMD}%s${C_RESET}\n" "ps" "List running work-lab containers"
   echo ""
-  # Paired Devcontainer commands
+  # Paired Devcontainer commands (work everywhere)
   printf "  ${C_PRIMARY}Paired Devcontainer${C_RESET}\n"
-  printf "    ${C_COMMAND}%-14s${C_RESET} %s\n" "dc <cmd>" "Run command in project's devcontainer"
-  printf "    ${C_COMMAND}%-14s${C_RESET} %s\n" "ports" "Show forwarded ports"
+  printf "    ${BOTH_CMD}%-14s${C_RESET} %s\n" "dc <cmd>" "Run command in project's devcontainer"
+  printf "    ${BOTH_CMD}%-14s${C_RESET} %s\n" "ports" "Show forwarded ports"
   echo ""
-  # Maintenance commands
+  # Maintenance commands (mixed)
   printf "  ${C_PRIMARY}Maintenance${C_RESET}\n"
-  printf "    ${C_COMMAND}%-14s${C_RESET} Check environment ${C_DIM}(--fix to auto-repair)${C_RESET}\n" "doctor"
-  printf "    ${C_COMMAND}%-14s${C_RESET} %s\n" "prune" "Clean up stopped containers"
+  printf "    ${BOTH_CMD}%-14s${C_RESET} Check environment ${C_DIM}(--fix to auto-repair)${C_RESET}\n" "doctor"
+  printf "    ${HOST_CMD}%-14s${C_RESET} ${HOST_CMD}%s${C_RESET}\n" "prune" "Clean up stopped containers"
   echo ""
-  # Info commands
+  # Info commands (work everywhere)
   printf "  ${C_PRIMARY}Info${C_RESET}\n"
-  printf "    ${C_COMMAND}%-14s${C_RESET} %s\n" "version" "Show version information"
-  printf "    ${C_COMMAND}%-14s${C_RESET} %s\n" "release-notes" "Show release notes"
-  printf "    ${C_COMMAND}%-14s${C_RESET} %s\n" "help" "Show this message"
+  printf "    ${BOTH_CMD}%-14s${C_RESET} %s\n" "version" "Show version information"
+  printf "    ${BOTH_CMD}%-14s${C_RESET} %s\n" "release-notes" "Show release notes"
+  printf "    ${BOTH_CMD}%-14s${C_RESET} %s\n" "help" "Show this message"
   echo ""
   print_dim "https://github.com/modern-tooling/work-lab"
   echo ""
