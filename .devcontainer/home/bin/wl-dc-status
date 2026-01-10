@@ -19,7 +19,7 @@ while IFS= read -r container_id; do
   folder_name=$(basename "$local_folder" 2>/dev/null)
 
   if [[ "$folder_name" == "$project_name" ]]; then
-    echo "◆ dc"
+    echo "⚡dc"
     exit 0
   fi
 done < <(docker ps --filter "label=devcontainer.local_folder" --format '{{.ID}}' 2>/dev/null)
