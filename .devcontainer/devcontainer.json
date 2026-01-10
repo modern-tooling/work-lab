@@ -12,8 +12,8 @@
   "remoteEnv": {
     "HOST_SHELL": "${localEnv:SHELL}"
   },
-  "postCreateCommand": "bash .devcontainer/post-create.sh",
-  "postStartCommand": "bash .devcontainer/post-start.sh",
+  "postCreateCommand": "bash /opt/work-lab/post-create.sh",
+  "postStartCommand": "bash /opt/work-lab/post-start.sh",
   "customizations": {
     "vscode": {
       "settings": {

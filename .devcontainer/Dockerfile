@@ -76,5 +76,9 @@ USER root
 COPY home/ /home/worklab/
 RUN chown -R worklab:worklab /home/worklab
 
+# Copy post-create and post-start scripts to fixed location
+COPY post-create.sh post-start.sh /opt/work-lab/
+RUN chmod +x /opt/work-lab/*.sh
+
 USER worklab
-WORKDIR /workspaces/work-lab
+WORKDIR /workspaces/project
