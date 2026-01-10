@@ -765,13 +765,16 @@ cmd_up() {
   activity "Starting work-lab container..."
 
   # Run devcontainer up with error handling
-  # Use --config to specify work-lab's devcontainer.json
-  # Use --workspace-folder for the actual project (sets devcontainer.local_folder label)
-  # Use --id-label to mark this as a work-lab container (for wl ps detection)
+  # Use --override-config to use work-lab's devcontainer.json
+  # Use --workspace-folder for the actual project
+  # Set both labels explicitly:
+  #   - devcontainer.local_folder: for standard devcontainer tooling
+  #   - work-lab.container: to identify this as a work-lab container
   local dc_output dc_exit=0
   dc_output=$(devcontainer up \
-    --config "$REPO_DIR/.devcontainer/devcontainer.json" \
+    --override-config "$REPO_DIR/.devcontainer/devcontainer.json" \
     --workspace-folder "$project_root" \
+    --id-label "devcontainer.local_folder=$project_root" \
     --id-label "work-lab.container=true" \
     "${mount_flags[@]}" 2>&1) || dc_exit=$?
 
