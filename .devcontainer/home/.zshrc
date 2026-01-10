@@ -20,6 +20,7 @@ alias ll='ls -la'
 alias la='ls -A'
 alias l='ls -CF'
 alias wl='work-lab'
+alias claude-dsp='claude --dangerously-skip-permissions'
 
 # One-time welcome guide in first tmux pane
 # Theme colors: cyan #50c8dc, sky blue #64a0dc, gold #ffd23c, dim #8c969f

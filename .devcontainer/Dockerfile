@@ -4,15 +4,17 @@
 
 FROM mcr.microsoft.com/devcontainers/base:ubuntu-24.04
 
+# Version pins (update these to upgrade)
+ARG TMUX_VERSION=3.5a
+
 # Create worklab user (replacing default vscode user)
 RUN useradd -m -s /bin/bash worklab && \
     usermod -aG sudo worklab && \
     echo "worklab ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers.d/worklab
 
-# Install core tools via apt
+# Install core tools via apt (tmux built from source below for 3.5+)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     # Terminal & shell
-    tmux \
     tree \
     zsh \
     # Version control
@@ -40,6 +42,17 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     # Create symlinks for tools with different names on Ubuntu
     && ln -sf /usr/bin/batcat /usr/bin/bat \
     && ln -sf /usr/bin/fdfind /usr/bin/fd
+
+# Build tmux from source (Ubuntu 24.04 only has 3.4)
+# 3.5+ has better clipboard (OSC 52) and image passthrough support
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libevent-dev libncurses-dev build-essential bison pkg-config \
+    && curl -fsSL "https://github.com/tmux/tmux/releases/download/${TMUX_VERSION}/tmux-${TMUX_VERSION}.tar.gz" | tar -xzf - -C /tmp \
+    && cd /tmp/tmux-${TMUX_VERSION} && ./configure --prefix=/usr && make -j$(nproc) && make install \
+    && rm -rf /tmp/tmux-${TMUX_VERSION} \
+    && apt-get purge -y build-essential bison pkg-config \
+    && apt-get autoremove -y \
+    && rm -rf /var/lib/apt/lists/*
 
 # Install Node.js LTS via NodeSource
 # Using NodeSource distribution for a stable, well-maintained LTS version.
