@@ -19,6 +19,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Use pre-built GHCR image instead of building from Dockerfile
 - Added CI workflow for Docker build testing
+- Baked zsh and gh (GitHub CLI) into image - no runtime feature installs
+- Removed devcontainer features to eliminate network-dependent rebuilds
+- Startup message now says "Starting work-lab container..."
 
 ## [0.3.0] - 2026-01-09
 
