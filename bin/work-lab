@@ -676,7 +676,7 @@ cmd_up() {
   if (( dc_exit != 0 )); then
     echo "$dc_output"
     echo ""
-    status_fail "devcontainer up failed"
+    status_fail "work-lab container up failed"
     # detect common errors and give hints
     if [[ "$dc_output" == *"ECONNREFUSED"* ]] || [[ "$dc_output" == *"ETIMEDOUT"* ]]; then
       hint "Network error - check internet connection"

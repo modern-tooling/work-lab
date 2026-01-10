@@ -1,8 +1,8 @@
 {
   "name": "work-lab",
   "image": "ghcr.io/modern-tooling/work-lab:latest",
-  "workspaceFolder": "/workspaces/work-lab",
-  "workspaceMount": "source=${localWorkspaceFolder},target=/workspaces/work-lab,type=bind,consistency=cached",
+  "workspaceFolder": "/workspaces/project",
+  "workspaceMount": "",
   "mounts": [
     // User's XDG config for work-lab customizations (optional)
     "source=${localEnv:HOME}/.config/work-lab,target=/home/worklab/.config/work-lab,type=bind,consistency=cached"
