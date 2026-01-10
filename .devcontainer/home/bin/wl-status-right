@@ -17,30 +17,41 @@ branch=$(git symbolic-ref --short HEAD 2>/dev/null || git rev-parse --short HEAD
 if [[ -n "$branch" ]]; then
   [[ ${#branch} -gt 20 ]] && branch="${branch:0:17}..."
   if git diff --quiet 2>/dev/null && git diff --cached --quiet 2>/dev/null; then
-    segments+=("#[fg=#64a0dc] $branch#[default]")
+    segments+=("#[fg=#64a0dc]$branch#[default]")
   else
-    segments+=("#[fg=#64a0dc] $branch ●#[default]")
+    segments+=("#[fg=#64a0dc]$branch*#[default]")
   fi
 fi
 
-# DC status (only if docker available and paired dc running)
-if command -v docker &>/dev/null; then
-  project_name=$(basename /workspaces/project 2>/dev/null)
-  while IFS= read -r container_id; do
-    [[ -z "$container_id" ]] && continue
-    container_name=$(docker inspect --format '{{.Name}}' "$container_id" 2>/dev/null | tr -d '/')
-    [[ "$container_name" == *"work-lab"* ]] && continue
-    local_folder=$(docker inspect --format '{{index .Config.Labels "devcontainer.local_folder"}}' "$container_id" 2>/dev/null)
-    folder_name=$(basename "$local_folder" 2>/dev/null)
-    if [[ "$folder_name" == "$project_name" ]]; then
-      segments+=("#[fg=#ffd23c]⚡ dc#[default]")
-      break
-    fi
-  done < <(docker ps --filter "label=devcontainer.local_folder" --format '{{.ID}}' 2>/dev/null)
+# DC status - shows paired devcontainer state
+# ⚡dc (gold)   = connected and reachable
+# ⚠dc (amber)  = devcontainer exists but not connected
+# (nothing)    = no devcontainer in project
+has_devcontainer=false
+dc_connected=false
+
+# check if project has a devcontainer config
+if [[ -d /workspaces/project/.devcontainer ]] || \
+   [[ -f /workspaces/project/.devcontainer.json ]]; then
+  has_devcontainer=true
+fi
+
+# check SSH tunnel connectivity (docker not available in work-lab)
+if [[ -f /workspaces/project/.work-lab/ip ]]; then
+  dc_ip=$(cat /workspaces/project/.work-lab/ip 2>/dev/null)
+  if [[ -n "$dc_ip" ]] && nc -z -w 1 "$dc_ip" 22 2>/dev/null; then
+    dc_connected=true
+  fi
+fi
+
+if $dc_connected; then
+  segments+=("#[fg=#ffd23c]⚡dc#[default]")
+elif $has_devcontainer; then
+  segments+=("#[fg=#e5a050]⚠ dc#[default]")
 fi
 
 # Time (always shown)
-segments+=("#[fg=#8c969f]󰥔 $(date +%H:%M)#[default]")
+segments+=("#[fg=#8c969f]$(date +%H:%M)#[default]")
 
 # Join with dim separators
 sep="#[fg=#3a3f4a] · #[default]"

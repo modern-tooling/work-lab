@@ -6,7 +6,7 @@
 
 set -Eeuo pipefail
 
-VERSION="0.7.1"
+VERSION="0.8.0"
 
 # shellcheck disable=SC2155
 readonly SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
@@ -548,6 +548,122 @@ ensure_ssh_tunnel() {
   " 2>/dev/null || true
 }
 
+# Show tree view for a single project (used by cmd_ps and cmd_start)
+# Args: project_path [show_star]
+_show_project_tree() {
+  local project="$1"
+  local show_star="${2:-false}"
+  local project_name
+  project_name=$(basename "$project")
+
+  # Get container info for this project
+  local wl_id="" wl_name="" dc_id="" dc_name=""
+
+  # Find work-lab container for this project
+  while IFS='|' read -r cid cname local_folder _status is_worklab; do
+    [[ -z "$cid" ]] && continue
+    if [[ "$is_worklab" == "true" ]] || [[ "$local_folder" == *"/work-lab" ]]; then
+      local project_mount
+      project_mount=$(docker inspect "$cid" --format '{{range .Mounts}}{{if eq .Destination "/workspaces/project"}}{{.Source}}{{end}}{{end}}' 2>/dev/null)
+      if [[ "$project_mount" == "$project" ]]; then
+        wl_id="$cid"
+        wl_name="$cname"
+        break
+      fi
+    fi
+  done < <(docker ps --filter "label=devcontainer.local_folder" \
+    --format "{{.ID}}|{{.Names}}|{{.Label \"devcontainer.local_folder\"}}|{{.Status}}|{{.Label \"work-lab.container\"}}" 2>/dev/null)
+
+  # Find paired devcontainer for this project (skip work-lab containers)
+  dc_id=""
+  dc_name=""
+  while IFS= read -r cid; do
+    [[ -z "$cid" ]] && continue
+    # Skip if this is a work-lab container
+    local is_wl
+    is_wl=$(docker inspect --format '{{index .Config.Labels "work-lab.container"}}' "$cid" 2>/dev/null)
+    if [[ "$is_wl" != "true" ]]; then
+      dc_id="$cid"
+      dc_name=$(docker inspect --format '{{.Name}}' "$dc_id" 2>/dev/null | tr -d '/')
+      break
+    fi
+  done < <(docker ps --filter "label=devcontainer.local_folder=$project" --format '{{.ID}}' 2>/dev/null)
+
+  local has_dc=false
+  has_devcontainer "$project" && has_dc=true
+
+  # Project header
+  if [[ "$show_star" == "true" ]]; then
+    printf "\n${C_ACCENT}%s/${C_RESET} ${C_CURRENT}${ICON_CURRENT}${C_RESET}\n" "$project_name"
+  else
+    printf "\n${C_ACCENT}%s/${C_RESET}\n" "$project_name"
+  fi
+
+  # Tree display logic
+  if [[ -n "$wl_id" ]] && [[ -n "$dc_id" ]]; then
+    # Both running
+    printf "  ├─ ${C_COMMAND}work-lab${C_RESET}      ${C_DIM}%s${C_RESET}  ${C_PASS}${ICON_RUNNING}${C_RESET}  ${C_DIM}%s${C_RESET}\n" "${wl_id:0:12}" "$wl_name"
+    local ssh_indicator=""
+    if check_project_ssh_tunnel "$project"; then
+      ssh_indicator="${C_SSH}${ICON_TUNNEL}${C_RESET}"
+    elif ! check_devcontainer_sshd "$dc_id"; then
+      ssh_indicator="${C_WARN}${ICON_NO_SSHD}${C_RESET}"
+    fi
+    printf "  └─ ${C_DIM}devcontainer${C_RESET}  ${C_DIM}%s${C_RESET}  ${C_PASS}${ICON_RUNNING}${C_RESET}  ${C_DIM}%s${C_RESET} %b\n" "${dc_id:0:12}" "$dc_name" "$ssh_indicator"
+  elif [[ -n "$wl_id" ]]; then
+    # Only work-lab running
+    if $has_dc; then
+      printf "  ├─ ${C_COMMAND}work-lab${C_RESET}      ${C_DIM}%s${C_RESET}  ${C_PASS}${ICON_RUNNING}${C_RESET}  ${C_DIM}%s${C_RESET}\n" "${wl_id:0:12}" "$wl_name"
+      printf "  └─ ${C_DIM}devcontainer${C_RESET}  ${C_DIM}────────────${C_RESET}  ${C_WARN}${ICON_STOPPED}${C_RESET}  ${C_WARN}stopped${C_RESET}\n"
+    else
+      printf "  └─ ${C_COMMAND}work-lab${C_RESET}      ${C_DIM}%s${C_RESET}  ${C_PASS}${ICON_RUNNING}${C_RESET}  ${C_DIM}%s${C_RESET} \n" "${wl_id:0:12}" "$wl_name"
+    fi
+  elif [[ -n "$dc_id" ]]; then
+    # Only devcontainer running
+    printf "  ├─ ${C_DIM}work-lab${C_RESET}      ${C_DIM}────────────${C_RESET}  ${C_WARN}${ICON_STOPPED}${C_RESET}  ${C_WARN}stopped${C_RESET}\n"
+    local ssh_indicator=""
+    if check_project_ssh_tunnel "$project"; then
+      ssh_indicator="${C_SSH}${ICON_TUNNEL}${C_RESET}"
+    elif ! check_devcontainer_sshd "$dc_id"; then
+      ssh_indicator="${C_WARN}${ICON_NO_SSHD}${C_RESET}"
+    fi
+    printf "  └─ ${C_DIM}devcontainer${C_RESET}  ${C_DIM}%s${C_RESET}  ${C_PASS}${ICON_RUNNING}${C_RESET}  ${C_DIM}%s${C_RESET} %b\n" "${dc_id:0:12}" "$dc_name" "$ssh_indicator"
+  elif $has_dc; then
+    # Both stopped but has devcontainer config
+    printf "  ├─ ${C_DIM}work-lab${C_RESET}      ${C_DIM}────────────${C_RESET}  ${C_WARN}${ICON_STOPPED}${C_RESET}  ${C_WARN}stopped${C_RESET}\n"
+    printf "  └─ ${C_DIM}devcontainer${C_RESET}  ${C_DIM}────────────${C_RESET}  ${C_WARN}${ICON_STOPPED}${C_RESET}  ${C_WARN}stopped${C_RESET}\n"
+  else
+    # Standalone, nothing running
+    printf "  └─ ${C_DIM}work-lab${C_RESET}      ${C_DIM}────────────${C_RESET}  ${C_WARN}${ICON_STOPPED}${C_RESET}  ${C_WARN}stopped${C_RESET}\n"
+  fi
+
+  # Show forwardPorts if devcontainer config exists (fast: just file read)
+  if $has_dc; then
+    local dc_json=""
+    if [[ -f "$project/.devcontainer/devcontainer.json" ]]; then
+      dc_json="$project/.devcontainer/devcontainer.json"
+    elif [[ -f "$project/.devcontainer.json" ]]; then
+      dc_json="$project/.devcontainer.json"
+    fi
+
+    if [[ -n "$dc_json" ]]; then
+      local ports=""
+      if command -v jq &>/dev/null; then
+        ports=$(sed 's|//.*||g' "$dc_json" 2>/dev/null | \
+                jq -r '.forwardPorts // [] | .[] | ":\(.)"' 2>/dev/null | \
+                tr '\n' ' ') || ports=""
+      fi
+      if [[ -z "$ports" ]]; then
+        ports=$(grep -oE '"forwardPorts"\s*:\s*\[[0-9, ]+\]' "$dc_json" 2>/dev/null | \
+                grep -oE '[0-9]+' | sed 's/^/:/' | tr '\n' ' ') || ports=""
+      fi
+      if [[ -n "${ports// /}" ]]; then
+        printf "     ${C_DIM}ports${C_RESET} ${C_COMMAND}%s${C_RESET}\n" "$ports"
+      fi
+    fi
+  fi
+}
+
 # List devcontainers grouped by project, showing work-lab + devcontainer pairs
 cmd_ps() {
   require_host
@@ -631,7 +747,7 @@ cmd_ps() {
 
     # Show gold star for current project
     if [[ "$project" == "$current_project" ]]; then
-      printf "\n${C_ACCENT}%s/${C_RESET} ${C_CURRENT}★${C_RESET}\n" "$project_name"
+      printf "\n${C_ACCENT}%s/${C_RESET} ${C_CURRENT}${ICON_CURRENT}${C_RESET}\n" "$project_name"
     else
       printf "\n${C_ACCENT}%s/${C_RESET}\n" "$project_name"
     fi
@@ -651,7 +767,7 @@ cmd_ps() {
       if (( wl_count == 1 )); then
         # Single work-lab session
         local wl_id="${wl_array[0]}"
-        printf "  ├─ ${C_COMMAND}work-lab${C_RESET}      ${C_DIM}%s${C_RESET}  ${C_PASS}●${C_RESET}  ${C_DIM}%s${C_RESET}\n" "${wl_id:0:12}" "${container_name[$wl_id]}"
+        printf "  ├─ ${C_COMMAND}work-lab${C_RESET}      ${C_DIM}%s${C_RESET}  ${C_PASS}${ICON_RUNNING}${C_RESET}  ${C_DIM}%s${C_RESET}\n" "${wl_id:0:12}" "${container_name[$wl_id]}"
       else
         # Multiple work-lab sessions sharing the same devcontainer
         local session_annotation
@@ -664,17 +780,17 @@ cmd_ps() {
           if (( i == wl_count )); then
             connector="│"  # last work-lab, devcontainer follows
           fi
-          printf "  %s   └─ ${C_DIM}%s${C_RESET}  ${C_PASS}●${C_RESET}  ${C_DIM}%s${C_RESET}\n" "$connector" "${wl_id:0:12}" "${container_name[$wl_id]}"
+          printf "  %s   └─ ${C_DIM}%s${C_RESET}  ${C_PASS}${ICON_RUNNING}${C_RESET}  ${C_DIM}%s${C_RESET}\n" "$connector" "${wl_id:0:12}" "${container_name[$wl_id]}"
         done
       fi
       # show devcontainer with SSH tunnel status
       local ssh_indicator=""
       if check_project_ssh_tunnel "$project"; then
-        ssh_indicator="${C_SSH}⚡${C_RESET}"  # tunnel ready
+        ssh_indicator="${C_SSH}${ICON_TUNNEL}${C_RESET}"  # tunnel ready
       elif ! check_devcontainer_sshd "$dc_id"; then
-        ssh_indicator="${C_WARN}⚠${C_RESET}"  # cannot tunnel (no sshd)
+        ssh_indicator="${C_WARN}${ICON_NO_SSHD}${C_RESET}"  # cannot tunnel (no sshd)
       fi
-      printf "  └─ ${C_DIM}devcontainer${C_RESET}  ${C_DIM}%s${C_RESET}  ${C_PASS}●${C_RESET}  ${C_DIM}%s${C_RESET} %b\n" "${dc_id:0:12}" "${container_name[$dc_id]}" "$ssh_indicator"
+      printf "  └─ ${C_DIM}devcontainer${C_RESET}  ${C_DIM}%s${C_RESET}  ${C_PASS}${ICON_RUNNING}${C_RESET}  ${C_DIM}%s${C_RESET} %b\n" "${dc_id:0:12}" "${container_name[$dc_id]}" "$ssh_indicator"
     elif (( wl_count > 0 )); then
       # Only work-lab(s), no devcontainer running
       local project_has_dc=0
@@ -685,11 +801,11 @@ cmd_ps() {
         local wl_id="${wl_array[0]}"
         if (( project_has_dc )); then
           # Show work-lab and stopped devcontainer as separate tree entries
-          printf "  ├─ ${C_COMMAND}work-lab${C_RESET}      ${C_DIM}%s${C_RESET}  ${C_PASS}●${C_RESET}  ${C_DIM}%s${C_RESET}\n" "${wl_id:0:12}" "${container_name[$wl_id]}"
-          printf "  └─ ${C_DIM}devcontainer${C_RESET}  ${C_DIM}────────────${C_RESET}  ${C_WARN}○${C_RESET}  ${C_WARN}stopped${C_RESET}\n"
+          printf "  ├─ ${C_COMMAND}work-lab${C_RESET}      ${C_DIM}%s${C_RESET}  ${C_PASS}${ICON_RUNNING}${C_RESET}  ${C_DIM}%s${C_RESET}\n" "${wl_id:0:12}" "${container_name[$wl_id]}"
+          printf "  └─ ${C_DIM}devcontainer${C_RESET}  ${C_DIM}────────────${C_RESET}  ${C_WARN}${ICON_STOPPED}${C_RESET}  ${C_WARN}stopped${C_RESET}\n"
         else
           # Standalone mode - no devcontainer available
-          printf "  └─ ${C_COMMAND}work-lab${C_RESET}      ${C_DIM}%s${C_RESET}  ${C_PASS}●${C_RESET}  ${C_DIM}%s${C_RESET} ${C_DIM}(standalone)${C_RESET}\n" "${wl_id:0:12}" "${container_name[$wl_id]}"
+          printf "  └─ ${C_COMMAND}work-lab${C_RESET}      ${C_DIM}%s${C_RESET}  ${C_PASS}${ICON_RUNNING}${C_RESET}  ${C_DIM}%s${C_RESET} \n" "${wl_id:0:12}" "${container_name[$wl_id]}"
         fi
       else
         # Multiple work-labs
@@ -700,35 +816,35 @@ cmd_ps() {
           if (( i == wl_count )) && (( ! project_has_dc )); then
             connector="└"
           fi
-          printf "  %s─ ${C_COMMAND}work-lab${C_RESET}      ${C_DIM}%s${C_RESET}  ${C_PASS}●${C_RESET}  ${C_DIM}%s${C_RESET}\n" "$connector" "${wl_id:0:12}" "${container_name[$wl_id]}"
+          printf "  %s─ ${C_COMMAND}work-lab${C_RESET}      ${C_DIM}%s${C_RESET}  ${C_PASS}${ICON_RUNNING}${C_RESET}  ${C_DIM}%s${C_RESET}\n" "$connector" "${wl_id:0:12}" "${container_name[$wl_id]}"
         done
         if (( project_has_dc )); then
-          printf "  └─ ${C_DIM}devcontainer${C_RESET}  ${C_DIM}────────────${C_RESET}  ${C_WARN}○${C_RESET}  ${C_WARN}stopped${C_RESET}\n"
+          printf "  └─ ${C_DIM}devcontainer${C_RESET}  ${C_DIM}────────────${C_RESET}  ${C_WARN}${ICON_STOPPED}${C_RESET}  ${C_WARN}stopped${C_RESET}\n"
         fi
       fi
     elif [[ -n "$dc_id" ]]; then
       # Only devcontainer (no work-lab) - show work-lab as stopped, devcontainer as running
-      printf "  ├─ ${C_DIM}work-lab${C_RESET}      ${C_DIM}────────────${C_RESET}  ${C_WARN}○${C_RESET}  ${C_WARN}stopped${C_RESET}\n"
+      printf "  ├─ ${C_DIM}work-lab${C_RESET}      ${C_DIM}────────────${C_RESET}  ${C_WARN}${ICON_STOPPED}${C_RESET}  ${C_WARN}stopped${C_RESET}\n"
       # show devcontainer with SSH tunnel status
       local ssh_indicator=""
       if check_project_ssh_tunnel "$project"; then
-        ssh_indicator="${C_SSH}⚡${C_RESET}"  # tunnel ready
+        ssh_indicator="${C_SSH}${ICON_TUNNEL}${C_RESET}"  # tunnel ready
       elif ! check_devcontainer_sshd "$dc_id"; then
-        ssh_indicator="${C_WARN}⚠${C_RESET}"  # cannot tunnel (no sshd)
+        ssh_indicator="${C_WARN}${ICON_NO_SSHD}${C_RESET}"  # cannot tunnel (no sshd)
       fi
-      printf "  └─ ${C_DIM}devcontainer${C_RESET}  ${C_DIM}%s${C_RESET}  ${C_PASS}●${C_RESET}  ${C_DIM}%s${C_RESET} %b\n" "${dc_id:0:12}" "${container_name[$dc_id]}" "$ssh_indicator"
+      printf "  └─ ${C_DIM}devcontainer${C_RESET}  ${C_DIM}%s${C_RESET}  ${C_PASS}${ICON_RUNNING}${C_RESET}  ${C_DIM}%s${C_RESET} %b\n" "${dc_id:0:12}" "${container_name[$dc_id]}" "$ssh_indicator"
     else
       # Both stopped (current project with .devcontainer but nothing running)
-      printf "  ├─ ${C_DIM}work-lab${C_RESET}      ${C_DIM}────────────${C_RESET}  ${C_WARN}○${C_RESET}  ${C_WARN}stopped${C_RESET}\n"
-      printf "  └─ ${C_DIM}devcontainer${C_RESET}  ${C_DIM}────────────${C_RESET}  ${C_WARN}○${C_RESET}  ${C_WARN}stopped${C_RESET}\n"
+      printf "  ├─ ${C_DIM}work-lab${C_RESET}      ${C_DIM}────────────${C_RESET}  ${C_WARN}${ICON_STOPPED}${C_RESET}  ${C_WARN}stopped${C_RESET}\n"
+      printf "  └─ ${C_DIM}devcontainer${C_RESET}  ${C_DIM}────────────${C_RESET}  ${C_WARN}${ICON_STOPPED}${C_RESET}  ${C_WARN}stopped${C_RESET}\n"
     fi
   done
 
   echo ""
-  printf "${C_DIM}Legend: ${C_PASS}●${C_DIM} running  ${C_WARN}○${C_DIM} stopped  ${C_SSH}⚡${C_DIM} tunnel ready  ${C_WARN}⚠${C_DIM} no sshd${C_RESET}\n"
+  printf "${C_DIM}Legend: ${C_PASS}${ICON_RUNNING}${C_DIM} running  ${C_WARN}${ICON_STOPPED}${C_DIM} stopped  ${C_SSH}${ICON_TUNNEL}${C_DIM} tunnel ready  ${C_WARN}${ICON_NO_SSHD}${C_DIM} no sshd${C_RESET}\n"
 }
 
-cmd_up() {
+cmd_start() {
   require_host
 
   # Ensure config directory exists (required for devcontainer mount)
@@ -750,27 +866,39 @@ cmd_up() {
   fi
   project_name=$(get_project_name "$project_root")
 
-  banner "work-lab start"
-  printf "  ${C_LABEL}project${C_RESET}  ${C_COMMAND}%s${C_RESET}\n" "$project_name"
-  printf "  ${C_LABEL}path${C_RESET}     %s\n" "$project_root"
+  # Start message first
+  echo ""
+  activity "Starting work-lab for ${C_COMMAND}$project_name${C_RESET}..."
 
-  # Build mount flags
+  # Build mount flags (silently)
   local mount_flags=()
-
-  # Add project mount (the current git repo)
   mount_flags+=("--mount=type=bind,source=$project_root,target=/workspaces/project")
-  printf "  ${C_LABEL}mount${C_RESET}    %s -> /workspaces/project\n" "$project_root"
 
-  # Add additional mounts from config
-  if (( ${#WORK_LAB_MOUNTS_RO[@]} > 0 )) || (( ${#WORK_LAB_MOUNTS_RW[@]} > 0 )); then
-    echo ""
-    subheader "Additional mounts:"
-    readarray -t -O "${#mount_flags[@]}" mount_flags < <(build_mount_flags)
+  # Collect additional mounts silently
+  local mount_spec src_path tgt_path
+  if (( ${#WORK_LAB_MOUNTS_RO[@]} > 0 )); then
+    for mount_spec in "${WORK_LAB_MOUNTS_RO[@]}"; do
+      [[ "$mount_spec" != *:* ]] && continue
+      src_path="${mount_spec%%:*}"
+      tgt_path="${mount_spec#*:}"
+      src_path="${src_path/#\~/$HOME}"
+      src_path="${src_path//\$HOME/$HOME}"
+      [[ -e "$src_path" ]] && mount_flags+=("--mount=type=bind,source=$src_path,target=$tgt_path")
+    done
+  fi
+  if (( ${#WORK_LAB_MOUNTS_RW[@]} > 0 )); then
+    for mount_spec in "${WORK_LAB_MOUNTS_RW[@]}"; do
+      [[ "$mount_spec" != *:* ]] && continue
+      src_path="${mount_spec%%:*}"
+      tgt_path="${mount_spec#*:}"
+      src_path="${src_path/#\~/$HOME}"
+      src_path="${src_path//\$HOME/$HOME}"
+      [[ -e "$src_path" ]] && mount_flags+=("--mount=type=bind,source=$src_path,target=$tgt_path")
+    done
   fi
 
   # Check if Docker image is available (local or can be pulled)
   if ! docker image inspect "$WORK_LAB_IMAGE" &>/dev/null; then
-    echo ""
     activity "Pulling work-lab image (first run)..."
     if ! docker pull "$WORK_LAB_IMAGE" 2>&1; then
       status_fail "Failed to pull Docker image: $WORK_LAB_IMAGE"
@@ -780,15 +908,19 @@ cmd_up() {
     fi
   fi
 
-  echo ""
-  activity "Starting work-lab container..."
+  # Fast local check: if stopped container exists with older image, remove it
+  local existing_container pulled_image_id container_image_id
+  existing_container=$(docker ps -a --filter "label=devcontainer.local_folder=$project_root" --filter "label=work-lab.container=true" --format '{{.ID}}' 2>/dev/null | head -1)
+  if [[ -n "$existing_container" ]]; then
+    pulled_image_id=$(docker images --format "{{.ID}}" "$WORK_LAB_IMAGE" 2>/dev/null | head -1)
+    container_image_id=$(docker inspect --format '{{.Image}}' "$existing_container" 2>/dev/null | cut -c8-19)
+    if [[ -n "$pulled_image_id" ]] && [[ "${pulled_image_id:0:12}" != "$container_image_id" ]]; then
+      activity "Updating to newer image..."
+      docker rm -f "$existing_container" &>/dev/null || true
+    fi
+  fi
 
   # Run devcontainer up with error handling
-  # Use --override-config to use work-lab's devcontainer.json
-  # Use --workspace-folder for the actual project
-  # Set both labels explicitly:
-  #   - devcontainer.local_folder: for standard devcontainer tooling
-  #   - work-lab.container: to identify this as a work-lab container
   local dc_output dc_exit=0
   dc_output=$(devcontainer up \
     --override-config "$REPO_DIR/.devcontainer/devcontainer.json" \
@@ -801,7 +933,6 @@ cmd_up() {
     echo "$dc_output"
     echo ""
     status_fail "work-lab container up failed"
-    # detect common errors and give hints
     if [[ "$dc_output" == *"ECONNREFUSED"* ]] || [[ "$dc_output" == *"ETIMEDOUT"* ]]; then
       action "Network error - check connection and retry"
     elif [[ "$dc_output" == *"not found"* ]] || [[ "$dc_output" == *"No such"* ]]; then
@@ -810,18 +941,14 @@ cmd_up() {
     fail_exit
   fi
 
-  echo ""
   print_pass "Ready!"
+
+  # Show project tree (same as wl ps, for visual continuity)
+  _show_project_tree "$project_root" "true"
+
+  echo ""
   tip "${C_COMMAND}wl mux${C_TIP}   ${C_DIM}recommended - persistent session${C_TIP}"
   tip "${C_COMMAND}wl shell${C_TIP} ${C_DIM}one-off commands${C_TIP}"
-
-  # Show sidecar mode tips
-  if has_devcontainer "$project_root"; then
-    echo ""
-    subheader "Sidecar mode detected"
-    detail "Project has its own devcontainer for building/testing"
-    printf "  ${C_DIM}To run in paired devcontainer:${C_RESET} ${C_COMMAND}wl dc <cmd>${C_RESET}\n"
-  fi
 }
 
 cmd_shell() {
@@ -1048,7 +1175,7 @@ cmd_rebuild() {
 
   # Start fresh with (potentially updated) image
   activity "Starting fresh container..."
-  cmd_up
+  cmd_start
 }
 
 # Clean up stopped work-lab containers and optionally images
@@ -1218,15 +1345,180 @@ cmd_ports() {
   fi
 }
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Paired devcontainer status
+# ─────────────────────────────────────────────────────────────────────────────
+
+# Show status of paired devcontainer connection
+# Works from both inside work-lab container and from host
+# Design: Clean layout with enough context for new users
+_dc_status() {
+  local project_path project_name
+
+  # determine project path based on context
+  if is_inside_container; then
+    project_path="/workspaces/project"
+    if [[ ! -d "$project_path" ]]; then
+      status_fail "Project not mounted at /workspaces/project"
+      return 1
+    fi
+    project_name=$(basename "$(readlink -f "$project_path" 2>/dev/null || echo "$project_path")")
+  else
+    project_path=$(find_git_root)
+    if [[ -z "$project_path" ]]; then
+      status_fail "Not in a git repository"
+      return 1
+    fi
+    project_name=$(basename "$project_path")
+  fi
+
+  # collect status for each component
+  local cfg_ok=false config_path=""
+  local ctr_ok=false ctr_status="not running"
+  local ssh_ok=false ssh_status="not configured"
+  local dc_id="" dc_ip="" dc_user=""
+
+  # check 1: devcontainer config exists?
+  if [[ -f "$project_path/.devcontainer/devcontainer.json" ]]; then
+    cfg_ok=true
+    config_path=".devcontainer/devcontainer.json"
+  elif [[ -f "$project_path/.devcontainer.json" ]]; then
+    cfg_ok=true
+    config_path=".devcontainer.json"
+  elif [[ -d "$project_path/.devcontainer" ]]; then
+    cfg_ok=true
+    config_path=".devcontainer/"
+  fi
+
+  # header
+  echo ""
+  printf "${C_BOLD}%s${C_RESET}" "$project_name"
+  if ! $cfg_ok; then
+    printf "  ${C_DIM}no devcontainer${C_RESET}\n"
+    return 0
+  fi
+  echo ""
+
+  # check 2: container running?
+  if is_inside_container; then
+    # from inside: check SSH tunnel connectivity
+    if [[ -f "$project_path/.work-lab/ip" ]]; then
+      dc_ip=$(cat "$project_path/.work-lab/ip" 2>/dev/null)
+      dc_user=$(cat "$project_path/.work-lab/user" 2>/dev/null || echo "vscode")
+      ssh_ok=true
+      ssh_status="$dc_user@$dc_ip"
+      if _port_open "$dc_ip" 22 2; then
+        ctr_ok=true
+        ctr_status="connected"
+      else
+        ctr_status="unreachable"
+      fi
+    fi
+  else
+    # from host: check docker
+    while IFS= read -r cid; do
+      [[ -z "$cid" ]] && continue
+      local cname local_folder
+      cname=$(docker inspect --format '{{.Name}}' "$cid" 2>/dev/null | tr -d '/')
+      local_folder=$(docker inspect --format '{{index .Config.Labels "devcontainer.local_folder"}}' "$cid" 2>/dev/null)
+      [[ "$cname" == *"work-lab"* ]] && continue
+      if [[ "$local_folder" == "$project_path" ]] || [[ "$(basename "$local_folder")" == "$project_name" ]]; then
+        dc_id="$cid"
+        ctr_ok=true
+        ctr_status="running (${cid:0:12})"
+        break
+      fi
+    done < <(docker ps --filter "label=devcontainer.local_folder" --format '{{.ID}}' 2>/dev/null)
+
+    # check SSH tunnel
+    if [[ -f "$project_path/.work-lab/ssh-key" ]] && [[ -f "$project_path/.work-lab/ip" ]]; then
+      dc_ip=$(cat "$project_path/.work-lab/ip" 2>/dev/null)
+      dc_user=$(cat "$project_path/.work-lab/user" 2>/dev/null || echo "vscode")
+      ssh_ok=true
+      ssh_status="$dc_user@$dc_ip"
+    fi
+  fi
+
+  # output status rows with aligned columns
+  echo ""
+  if $cfg_ok; then
+    printf "  ${C_PASS}✓${C_RESET} ${C_DIM}config${C_RESET}     %s\n" "$config_path"
+  else
+    printf "  ${C_FAIL}✖${C_RESET} ${C_DIM}config${C_RESET}     not found\n"
+  fi
+
+  if $ctr_ok; then
+    printf "  ${C_PASS}✓${C_RESET} ${C_DIM}container${C_RESET}  ${C_PASS}%s${C_RESET}\n" "$ctr_status"
+  else
+    printf "  ${C_FAIL}✖${C_RESET} ${C_DIM}container${C_RESET}  ${C_WARN}%s${C_RESET}\n" "$ctr_status"
+  fi
+
+  if $ssh_ok; then
+    printf "  ${C_PASS}✓${C_RESET} ${C_DIM}ssh${C_RESET}        %s\n" "$ssh_status"
+  else
+    printf "  ${C_DIM}─${C_RESET} ${C_DIM}ssh${C_RESET}        %s\n" "$ssh_status"
+  fi
+
+  # show forwardPorts if available
+  local dc_json=""
+  if [[ -f "$project_path/.devcontainer/devcontainer.json" ]]; then
+    dc_json="$project_path/.devcontainer/devcontainer.json"
+  elif [[ -f "$project_path/.devcontainer.json" ]]; then
+    dc_json="$project_path/.devcontainer.json"
+  fi
+
+  if [[ -n "$dc_json" ]]; then
+    local ports=""
+    # try jq first (strip comments with sed), fall back to grep
+    if command -v jq &>/dev/null; then
+      ports=$(sed 's|//.*||g' "$dc_json" 2>/dev/null | \
+              jq -r '.forwardPorts // [] | .[] | ":\(.)"' 2>/dev/null | \
+              tr '\n' ' ') || ports=""
+    fi
+    # fallback: simple grep extraction
+    if [[ -z "$ports" ]]; then
+      ports=$(grep -oE '"forwardPorts"\s*:\s*\[[0-9, ]+\]' "$dc_json" 2>/dev/null | \
+              grep -oE '[0-9]+' | sed 's/^/:/' | tr '\n' ' ') || ports=""
+    fi
+    if [[ -n "${ports// /}" ]]; then
+      printf "  ${C_DIM}─${C_RESET} ${C_DIM}ports${C_RESET}      ${C_COMMAND}%s${C_RESET}\n" "$ports"
+    fi
+  fi
+
+  # action
+  echo ""
+  if $ctr_ok; then
+    printf "${C_COMMAND}→ wl dc <cmd>${C_RESET}"
+    if is_inside_container; then
+      printf " ${C_DIM}or${C_RESET} ${C_COMMAND}Ctrl-b S${C_RESET}"
+    fi
+    echo ""
+  else
+    printf "${C_ACTION}→ Start: ${C_COMMAND}devcontainer up${C_ACTION} or VS Code${C_RESET}\n"
+  fi
+
+  return 0
+}
+
 # Run command in associated project devcontainer (from inside work-lab or host)
 cmd_dc() {
   local cmd="${1:-}"
+
+  # Handle --status flag first (before shifting)
+  if [[ "$cmd" == "--status" ]]; then
+    _dc_status
+    return $?
+  fi
+
   shift 2>/dev/null || true
 
   if [[ -z "$cmd" ]]; then
     echo "Usage: work-lab dc <command> [args...]"
     echo ""
     echo "Run a command in the project's devcontainer."
+    echo ""
+    echo "Options:"
+    printf "  ${C_COMMAND}--status${C_RESET}                     Show paired devcontainer status\n"
     echo ""
     echo "Examples:"
     printf "  ${C_COMMAND}work-lab dc npm test${C_RESET}        Run tests in devcontainer\n"
@@ -1487,18 +1779,70 @@ cmd_doctor() {
       status_ok "zellij: $(zellij --version 2>/dev/null || echo 'installed')"
     fi
 
-    # Check SSH tunnel to devcontainer
-    header "Sidecar Connection"
-    if [[ -f /workspaces/project/.work-lab/ssh-key ]] && [[ -f /workspaces/project/.work-lab/ip ]]; then
-      local dc_ip dc_user
-      dc_ip=$(cat /workspaces/project/.work-lab/ip 2>/dev/null)
-      dc_user=$(cat /workspaces/project/.work-lab/user 2>/dev/null || echo "vscode")
-      status_ok "SSH tunnel configured"
-      detail "Target: $dc_user@$dc_ip"
-      tip "Connect to devcontainer: ${C_COMMAND}dc-ssh${C_TIP}"
+    # Check paired devcontainer status
+    header "Paired Devcontainer"
+    local project_path="/workspaces/project"
+    local cfg_ok=false config_path=""
+    local ctr_ok=false ctr_status="not running"
+    local ssh_ok=false ssh_status="not configured"
+    local dc_ip="" dc_user=""
+
+    # check config
+    if [[ -f "$project_path/.devcontainer/devcontainer.json" ]]; then
+      cfg_ok=true
+      config_path=".devcontainer/devcontainer.json"
+    elif [[ -f "$project_path/.devcontainer.json" ]]; then
+      cfg_ok=true
+      config_path=".devcontainer.json"
+    elif [[ -d "$project_path/.devcontainer" ]]; then
+      cfg_ok=true
+      config_path=".devcontainer/"
+    fi
+
+    if ! $cfg_ok; then
+      printf "  ${C_DIM}─${C_RESET} ${C_DIM}config${C_RESET}     no devcontainer in project\n"
+      echo ""
+      print_pass "Inside container. Run 'work-lab doctor' on host for full diagnostics."
+      return 0
+    fi
+
+    # check SSH tunnel connectivity
+    if [[ -f "$project_path/.work-lab/ip" ]]; then
+      dc_ip=$(cat "$project_path/.work-lab/ip" 2>/dev/null)
+      dc_user=$(cat "$project_path/.work-lab/user" 2>/dev/null || echo "vscode")
+      ssh_ok=true
+      ssh_status="$dc_user@$dc_ip"
+      if _port_open "$dc_ip" 22 2; then
+        ctr_ok=true
+        ctr_status="connected"
+      else
+        ctr_status="unreachable"
+      fi
+    fi
+
+    # status rows
+    printf "  ${C_PASS}✓${C_RESET} ${C_DIM}config${C_RESET}     %s\n" "$config_path"
+
+    if $ctr_ok; then
+      printf "  ${C_PASS}✓${C_RESET} ${C_DIM}container${C_RESET}  ${C_PASS}%s${C_RESET}\n" "$ctr_status"
     else
-      status_info "No SSH tunnel configured"
-      detail "Project may not have a devcontainer, or tunnel not set up"
+      printf "  ${C_FAIL}✖${C_RESET} ${C_DIM}container${C_RESET}  ${C_WARN}%s${C_RESET}\n" "$ctr_status"
+    fi
+
+    if $ssh_ok; then
+      printf "  ${C_PASS}✓${C_RESET} ${C_DIM}ssh${C_RESET}        %s\n" "$ssh_status"
+    else
+      printf "  ${C_DIM}─${C_RESET} ${C_DIM}ssh${C_RESET}        %s\n" "$ssh_status"
+    fi
+
+    # summary
+    echo ""
+    if $ctr_ok; then
+      printf "  ${C_COMMAND}→ wl dc <cmd>${C_RESET} or ${C_COMMAND}Ctrl-b S${C_RESET}\n"
+    elif $ssh_ok; then
+      action "Container unreachable at $dc_ip"
+    else
+      action "From host: ${C_COMMAND}wl mux${C_ACTION} (sets up tunnel)"
     fi
 
     echo ""
@@ -1669,8 +2013,24 @@ cmd_doctor() {
         elif echo "$pull_output" | grep -q "Downloaded newer image\|Pull complete"; then
           status_ok "updated to latest"
           detail "New image pulled"
-          if [[ -n "$(find_container)" ]]; then
-            action "Rebuild: ${C_COMMAND}work-lab rebuild${C_ACTION}"
+          local container_id
+          container_id=$(find_container)
+          if [[ -n "$container_id" ]]; then
+            # Check if tmux session is attached
+            local session_attached=false
+            if docker exec "$container_id" tmux has-session -t lab 2>/dev/null; then
+              # Check if any clients are attached
+              local client_count
+              client_count=$(docker exec "$container_id" tmux list-clients -t lab 2>/dev/null | wc -l) || client_count=0
+              (( client_count > 0 )) && session_attached=true
+            fi
+            if $session_attached; then
+              action "Rebuild: ${C_COMMAND}work-lab rebuild${C_ACTION} (tmux session attached)"
+            else
+              activity "rebuilding container..."
+              cmd_rebuild
+              status_ok "container rebuilt with new image"
+            fi
           fi
           ((fixes_applied++)) || true
         else
@@ -1682,10 +2042,27 @@ cmd_doctor() {
         detail "Network or registry issue"
       fi
     else
-      # Normal mode: just show current image info
-      status_ok "present (pulled $local_created)"
-      detail "$WORK_LAB_IMAGE"
-      tip "Check for updates: ${C_COMMAND}work-lab doctor --fix${C_TIP}"
+      # Normal mode: fast local check - compare running container vs pulled image
+      local container_id pulled_image_id container_image_id
+      container_id=$(find_container)
+      pulled_image_id=$(docker images --format "{{.ID}}" "$WORK_LAB_IMAGE" 2>/dev/null | head -1)
+
+      if [[ -n "$container_id" ]]; then
+        container_image_id=$(docker inspect --format '{{.Image}}' "$container_id" 2>/dev/null | cut -c8-19)
+        if [[ -n "$pulled_image_id" ]] && [[ "${pulled_image_id:0:12}" != "$container_image_id" ]]; then
+          status_warn "container using older image"
+          detail "Pulled newer image, container needs rebuild"
+          action "Run: ${C_COMMAND}work-lab rebuild${C_ACTION}"
+          ((errors++)) || true
+        else
+          status_ok "up to date (pulled $local_created)"
+          detail "$WORK_LAB_IMAGE"
+        fi
+      else
+        status_ok "present (pulled $local_created)"
+        detail "$WORK_LAB_IMAGE"
+      fi
+      tip "Check registry: ${C_COMMAND}work-lab doctor --fix${C_TIP}"
     fi
   else
     status_skip "cannot check (docker not available)"
@@ -1870,7 +2247,7 @@ cmd_doctor() {
 # Main
 case "${1:-}" in
   start|up)
-    cmd_up
+    cmd_start
     ;;
   shell)
     shift

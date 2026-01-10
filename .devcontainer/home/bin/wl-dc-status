@@ -1,26 +1,28 @@
 #!/bin/bash
 # work-lab devcontainer status for tmux status bar
-# Shows "⚡ dc" if paired devcontainer is running, nothing otherwise
-# Keeping the status bar clean when dc not available
+# ⚡dc = connected and reachable
+# ⚠dc = devcontainer exists but not connected
+# (nothing) = no devcontainer in project
 
-# Quick check: is docker available?
-command -v docker &>/dev/null || exit 0
+has_devcontainer=false
+dc_connected=false
 
-# Get project name from the mounted workspace
-project_name=$(basename /workspaces/project 2>/dev/null) || exit 0
+# check if project has a devcontainer config
+if [[ -d /workspaces/project/.devcontainer ]] || \
+   [[ -f /workspaces/project/.devcontainer.json ]]; then
+  has_devcontainer=true
+fi
 
-# Look for a devcontainer matching this project (excluding work-lab containers)
-while IFS= read -r container_id; do
-  [[ -z "$container_id" ]] && continue
-
-  container_name=$(docker inspect --format '{{.Name}}' "$container_id" 2>/dev/null | tr -d '/')
-  [[ "$container_name" == *"work-lab"* ]] && continue
-
-  local_folder=$(docker inspect --format '{{index .Config.Labels "devcontainer.local_folder"}}' "$container_id" 2>/dev/null)
-  folder_name=$(basename "$local_folder" 2>/dev/null)
-
-  if [[ "$folder_name" == "$project_name" ]]; then
-    echo "⚡ dc"
-    exit 0
+# check SSH tunnel connectivity
+if [[ -f /workspaces/project/.work-lab/ip ]]; then
+  dc_ip=$(cat /workspaces/project/.work-lab/ip 2>/dev/null)
+  if [[ -n "$dc_ip" ]] && nc -z -w 1 "$dc_ip" 22 2>/dev/null; then
+    dc_connected=true
   fi
-done < <(docker ps --filter "label=devcontainer.local_folder" --format '{{.ID}}' 2>/dev/null)
+fi
+
+if $dc_connected; then
+  echo "⚡dc"
+elif $has_devcontainer; then
+  echo "⚠ dc"
+fi

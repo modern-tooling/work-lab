@@ -78,6 +78,7 @@ fi
 # ─────────────────────────────────────────────────────────────────────────────
 # Icons (Unicode)
 # ─────────────────────────────────────────────────────────────────────────────
+# Status indicators
 ICON_PASS="✓"
 ICON_WARN="⚠"
 ICON_FAIL="✖"
@@ -86,6 +87,13 @@ ICON_SKIP="─"
 ICON_ARROW="→"
 ICON_DOT="•"
 ICON_TIP="*"
+
+# Container/process status (used in wl ps, wl start tree view, tmux status)
+ICON_RUNNING="●"      # container running
+ICON_STOPPED="○"      # container stopped
+ICON_TUNNEL="⚡"      # SSH tunnel ready / connected
+ICON_NO_SSHD="⚠ "     # no sshd available (trailing space prevents overlap)
+ICON_CURRENT="★"      # current project marker
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Semantic color aliases (use these in code for clarity)
@@ -154,7 +162,7 @@ banner() {
 
 # Progress/activity indicator
 activity() {
-  printf "${C_DIM}${ICON_DOT}${C_RESET} %s\n" "$*"
+  printf "${C_DIM}${ICON_DOT}${C_RESET} %b\n" "$*"
 }
 
 # Indented detail (for multi-level info)

@@ -6,6 +6,27 @@ All notable changes to work-lab will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.0] - 2026-01-10
+
+### Added
+
+- **`wl dc --status`**: Check paired devcontainer connection status at a glance
+- **Tree view in `wl start`**: Shows container status matching `wl ps` for visual continuity
+- **Devcontainer ports display**: Shows `forwardPorts` in `wl start` and `wl dc --status`
+- **Gold tmux tabs for devcontainer sessions**: `[dc]` windows clearly distinguished from regular tabs
+
+### Changed
+
+- **`wl start` cleaner output**: Removed banner, redundant path info; shows activity first
+- **`wl doctor --fix` auto-rebuild**: Rebuilds container after pulling new image (if no tmux session attached)
+- **tmux status bar**: `⚡dc` when connected, `⚠ dc` when devcontainer exists but unreachable
+- **tmux scripts use full paths**: Fixes status bar not displaying on some systems
+
+### Fixed
+
+- **tmux status scripts**: Now work reliably (use `$HOME/bin/` paths instead of relying on PATH)
+- **JSONC parsing**: Port extraction handles `//` comments in devcontainer.json
+
 ## [0.7.1] - 2026-01-10
 
 ### Added
@@ -152,6 +173,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Manual clone
 - Installed tools: tmux, git, curl, jq, ripgrep, fzf, Node.js 22 LTS, Claude CLI, Gastown, Beads
 
+[0.8.0]: https://github.com/modern-tooling/work-lab/releases/tag/v0.8.0
 [0.7.1]: https://github.com/modern-tooling/work-lab/releases/tag/v0.7.1
 [0.7.0]: https://github.com/modern-tooling/work-lab/releases/tag/v0.7.0
 [0.6.0]: https://github.com/modern-tooling/work-lab/releases/tag/v0.6.0
