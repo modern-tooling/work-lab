@@ -10,20 +10,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- **Unified `wl` command**: Works both on host AND inside container
-  - Inside container: installed from GitHub at `/opt/work-lab`
-  - Detection via `/opt/work-lab` directory
+- **Unified `wl` command**: Works both on host AND inside the container
 - **Context-aware help**: Host-only commands dimmed when inside container
 
 ### Changed
 
 - **Claude authentication**: `.claude` mount changed to read-write for persistent login
-- **Tmux status bar**: tmux2k-inspired design with Nerd Font icons and rounded pills
-- **Help styling**: Consistent colors matching beads (command cyan, description white)
+- **Tmux status bar**: tmux2k-inspired design with Nerd Font icons and rounded window tabs
+- **Help styling**: Consistent colors (command cyan, description white)
 
 ### Fixed
 
-- **Welcome guide**: Now shows in first tmux pane (fixed window:pane detection)
+- **Welcome guide**: Now shows correctly in first tmux pane
 
 ## [0.7.0] - 2026-01-09
 
@@ -73,76 +71,60 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- Multi-architecture Docker builds (amd64 + arm64 for Apple Silicon)
-- Go download now detects architecture instead of hardcoding amd64
-- `wl up` error handling shows helpful messages for network failures
+- **Apple Silicon support**: Multi-architecture Docker builds (amd64 + arm64)
+- **Better error messages**: Helpful hints for network failures and missing dependencies
+- **Homebrew install**: Fixed "bind source path does not exist" error
 - `wl ps` shows current project even when both containers stopped
-- Homebrew install: fixed "bind source path does not exist" error
-- Post-create/post-start scripts now use absolute paths in image
 
 ### Changed
 
-- Use pre-built GHCR image instead of building from Dockerfile
-- Added CI workflow for Docker build testing
-- Baked zsh and gh (GitHub CLI) into image - no runtime feature installs
-- Removed devcontainer features to eliminate network-dependent rebuilds
-- Startup message now says "Starting work-lab container..."
+- **Faster startup**: Pre-built GHCR image eliminates network-dependent rebuilds
+- **zsh and gh (GitHub CLI) included**: Baked into image, no runtime feature installs
 - Docker image versioned independently from CLI (rebuilds only when Dockerfile changes)
 
 ## [0.3.0] - 2026-01-09
 
 ### Added
 
-- **SSH tunneling to devcontainers**: Run commands in project devcontainer from work-lab
-  - `wl dc <cmd>` works from inside work-lab via SSH tunnel
-  - `prefix + S` in tmux to SSH into devcontainer
+- **SSH tunneling to devcontainers**: Run commands in your project's devcontainer from work-lab
+  - `wl dc <cmd>` runs commands in paired devcontainer
+  - `Ctrl-b S` in tmux to SSH into devcontainer
   - Zero devcontainer config required (just enable sshd feature)
-  - Host orchestrates setup via `wl mux`/`wl shell` (lazy initialization)
   - NO Docker socket in work-lab - maintains full isolation
-- `wl ps` shows tunnel status: `⚡` = ready, `~` = sshd detected (run `wl mux`)
+- **`wl ps` tunnel status**: Shows `⚡` when tunnel ready, `~` when sshd detected
+- **`wl shell <cmd>`**: Now supports running commands directly (not just interactive shell)
 - `wl doctor` checks for `wl` alias and suggests setup if missing
-- `wl doctor` detects SSH tunnel configuration in sidecar mode
-- New documentation: `docs/ssh-tunneling.md`
-- Integration test script: `test/integration/tunnel-test.sh`
 - `openssh-client` added to container image
 
 ### Changed
 
-- `wl shell <cmd>` now supports running commands directly (not just interactive shell)
-- `wl dc` now runs as proper user (not root) and auto-detects workspace directory
-- `wl dc` from host now auto-configures SSH tunnel for future use inside work-lab
-- Container discovery (`find_container`) checks actual mount paths instead of labels
-- README updated with clearer value proposition and sidecar mode examples
-- No longer auto-modifies .gitignore (user controls their own files)
+- `wl dc` runs as proper user (not root) and auto-detects workspace directory
+- `wl dc` from host auto-configures SSH tunnel for future use inside work-lab
 
 ### Security
 
 - SSH tunneling uses shared filesystem approach instead of Docker socket
 - No additional privileges required in work-lab container
-- Maintains full isolation from host system
+- Full isolation maintained from host system
 
 ## [0.2.0] - 2026-01-09
 
 ### Added
 
-- Go 1.24 runtime for gastown
-- Gastown (`gt`) AI coding agent orchestrator via `go install`
+- **Go 1.24 runtime**: Enables gastown AI agent orchestrator
+- **Gastown (`gt`)**: AI coding agent orchestrator included
 - Platform support note in README (Linux/macOS only)
-- Beads-style versioning: `0.<release>.0` with patch slot reserved
-- Require human confirmation before releasing (in AGENTS.md)
 
 ### Changed
 
-- `wl ps` now shows complete tree for each project:
-  - Stopped containers shown with unfilled circle (○) indicator
-  - Running containers shown with filled circle (●) indicator
+- **`wl ps` improved display**: Shows complete tree with status indicators
+  - `●` running, `○` stopped
   - Both work-lab and devcontainer always shown in tree
-- Updated README examples to use `gt` command for gastown
 
 ### Fixed
 
 - Mount format bug: devcontainer CLI requires `--mount=VALUE` (with equals sign)
-- Auto-create `~/.config/work-lab` directory in `wl up` if missing
+- Auto-create `~/.config/work-lab` directory if missing
 
 ## [0.1.0] - 2026-01-09
 

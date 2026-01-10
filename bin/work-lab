@@ -208,7 +208,7 @@ usage() {
   fi
 
   echo ""
-  printf "${C_BOLD}work-lab${C_RESET}%s\n" "$inside"
+  printf "${C_BOLD}work-lab${C_RESET} ${C_COMMAND}%s${C_RESET}%s\n" "$VERSION" "$inside"
   print_dim "containerized environment for AI coding agents"
   echo ""
   print_accent "Usage:"
@@ -218,15 +218,15 @@ usage() {
   echo ""
   # Lifecycle commands (host-only)
   printf "  ${C_PRIMARY}Lifecycle${C_RESET}\n"
-  printf "    ${HOST_ONLY}${C_COMMAND}%-14s${C_RESET}${HOST_ONLY} %s${C_RESET}\n" "start" "Start work-lab for the current git project"
-  printf "    ${HOST_ONLY}${C_COMMAND}%-14s${C_RESET}${HOST_ONLY} %s${C_RESET}\n" "stop" "Stop the container"
+  printf "    ${HOST_ONLY}${C_COMMAND}%-14s${C_RESET}${HOST_ONLY} %s${C_RESET}\n" "start" "Start work-lab for current git project"
+  printf "    ${HOST_ONLY}${C_COMMAND}%-14s${C_RESET}${HOST_ONLY} %s${C_RESET}\n" "stop [project]" "Stop container"
+  printf "    ${HOST_ONLY}${C_COMMAND}%-14s${C_RESET}${HOST_ONLY} %s${C_RESET}\n" "ps" "List running work-lab containers"
   printf "    ${HOST_ONLY}${C_COMMAND}%-14s${C_RESET}${HOST_ONLY} %s${C_RESET}\n" "rebuild" "Stop, remove, and start fresh"
   echo ""
   # Session commands
   printf "  ${C_PRIMARY}Session${C_RESET}\n"
   printf "    ${HOST_ONLY}${C_COMMAND}%-14s${C_RESET}${HOST_ONLY} Attach to tmux session ${C_DIM}(recommended)${C_RESET}\n" "mux [project]"
   printf "    ${C_COMMAND}%-14s${C_RESET} %s\n" "shell" "Run a one-off shell command"
-  printf "    ${HOST_ONLY}${C_COMMAND}%-14s${C_RESET}${HOST_ONLY} %s${C_RESET}\n" "ps" "List running work-lab containers"
   echo ""
   # Paired Devcontainer commands
   printf "  ${C_PRIMARY}Paired Devcontainer${C_RESET}\n"
@@ -1011,12 +1011,24 @@ find_container_by_name() {
 cmd_stop() {
   require_host
 
+  local target="${1:-}"
   local container_id
-  container_id=$(find_container)
-  if [[ -z "$container_id" ]]; then
-    status_info "Container not running"
-    exit 0
+
+  if [[ -n "$target" ]]; then
+    # Stop specific project by name
+    container_id=$(find_container_by_name "$target")
+    if [[ -z "$container_id" ]]; then
+      return 1  # find_container_by_name already printed error
+    fi
+  else
+    # Stop current project
+    container_id=$(find_container)
+    if [[ -z "$container_id" ]]; then
+      status_info "Container not running"
+      exit 0
+    fi
   fi
+
   activity "Stopping container..."
   docker stop "$container_id" > /dev/null
   status_ok "Stopped"
@@ -1876,7 +1888,8 @@ case "${1:-}" in
     cmd_ports
     ;;
   stop|down)
-    cmd_stop
+    shift
+    cmd_stop "$@"
     ;;
   rebuild)
     cmd_rebuild

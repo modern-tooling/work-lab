@@ -53,26 +53,38 @@ Rule: If a user wouldn't notice the change while using the tool, don't mention i
 
 When releasing a new version (after human approval):
 
-1. Update `VERSION` in `bin/work-lab`
-2. Update `CHANGELOG.md` with release notes
-3. Commit and push to main
-4. Create git tag: `git tag -a v0.5.0 -m "Release v0.5.0"`
-5. Push tag: `git push origin v0.5.0`
-6. **MUST** create GitHub release (this is NOT automated):
+1. [ ] Update `VERSION` in `bin/work-lab`
+2. [ ] Update `CHANGELOG.md` with release notes
+3. [ ] Commit and push to main
+4. [ ] Create git tag: `git tag -a v0.8.0 -m "Release v0.8.0"`
+5. [ ] Push tag: `git push origin v0.8.0`
+6. [ ] **Create GitHub release** (required for `wl release-notes` to work):
    ```bash
-   gh release create v0.5.0 -R modern-tooling/work-lab \
-     --title "v0.5.0" --latest \
-     --notes "$(cat CHANGELOG.md | sed -n '/## \[0.5.0\]/,/## \[0.4.0\]/p' | head -n -1)"
+   gh release create v0.8.0 -R modern-tooling/work-lab \
+     --title "v0.8.0" --latest \
+     --notes "$(cat <<'EOF'
+   ## Added
+   - **Feature**: Description
+
+   ## Changed
+   - **Change**: Description
+
+   ## Fixed
+   - **Fix**: Description
+   EOF
+   )"
    ```
-7. **MUST** update Homebrew tap (this is NOT automated):
+7. [ ] **Update Homebrew tap**:
    ```bash
    # Get SHA256 of the new release tarball
-   curl -sL https://github.com/modern-tooling/work-lab/archive/refs/tags/v0.5.0.tar.gz | shasum -a 256
+   curl -sL https://github.com/modern-tooling/work-lab/archive/refs/tags/v0.8.0.tar.gz | shasum -a 256
 
    # Update Formula/work-lab.rb in modern-tooling/homebrew-tap:
    # - Change url to new tag
    # - Change sha256 to new hash
    ```
+
+**CRITICAL**: Steps 6 and 7 are NOT automated. `wl release-notes` fetches from GitHub Releases API.
 
 **Release frequency:** One version per day maximum. If multiple features land same day, combine into single release.
 
