@@ -14,6 +14,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Go download now detects architecture instead of hardcoding amd64
 - `wl up` error handling shows helpful messages for network failures
 - `wl ps` shows current project even when both containers stopped
+- Homebrew install: fixed "bind source path does not exist" error
+- Post-create/post-start scripts now use absolute paths in image
 
 ### Changed
 
@@ -22,6 +24,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Baked zsh and gh (GitHub CLI) into image - no runtime feature installs
 - Removed devcontainer features to eliminate network-dependent rebuilds
 - Startup message now says "Starting work-lab container..."
+- Docker image versioned independently from CLI (rebuilds only when Dockerfile changes)
 
 ## [0.3.0] - 2026-01-09
 
