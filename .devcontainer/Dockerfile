@@ -81,6 +81,7 @@ COPY .devcontainer/home/ /home/worklab/
 RUN chown -R worklab:worklab /home/worklab
 
 # Install work-lab CLI from GitHub (works inside container too)
+# Pulls latest from main branch at build time
 RUN mkdir -p /opt/work-lab/bin /opt/work-lab/lib && \
     curl -fsSL https://raw.githubusercontent.com/modern-tooling/work-lab/main/bin/work-lab -o /opt/work-lab/bin/work-lab && \
     curl -fsSL https://raw.githubusercontent.com/modern-tooling/work-lab/main/lib/style.sh -o /opt/work-lab/lib/style.sh && \
