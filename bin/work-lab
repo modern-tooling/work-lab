@@ -6,7 +6,7 @@
 
 set -Eeuo pipefail
 
-VERSION="0.4.0"
+VERSION="0.5.0"
 
 # shellcheck disable=SC2155
 readonly SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
@@ -36,7 +36,7 @@ source "$REPO_DIR/lib/style.sh"
 # Portability helpers
 # ─────────────────────────────────────────────────────────────────────────────
 # Portable timeout command (macOS doesn't have timeout by default)
-# Falls back to gtimeout (from coreutils) or runs without timeout
+# Falls back to gtimeout (from coreutils) or returns failure (skip the operation)
 _timeout() {
   local seconds="$1"
   shift
@@ -45,8 +45,21 @@ _timeout() {
   elif command -v gtimeout &>/dev/null; then
     gtimeout "$seconds" "$@"
   else
-    # no timeout available - run without (may hang on unresponsive systems)
-    "$@"
+    # no timeout available - fail rather than hang indefinitely
+    return 1
+  fi
+}
+
+# Portable TCP port check with timeout
+# Usage: _port_open host port [timeout_secs]
+# Returns 0 if port is open, 1 otherwise
+_port_open() {
+  local host="$1" port="$2" timeout_secs="${3:-2}"
+  # macOS nc uses -G for connect timeout, Linux/BSD uses -w
+  if [[ "$(uname)" == "Darwin" ]]; then
+    nc -z -G "$timeout_secs" "$host" "$port" 2>/dev/null
+  else
+    nc -z -w "$timeout_secs" "$host" "$port" 2>/dev/null
   fi
 }
 
@@ -367,9 +380,8 @@ check_project_ssh_tunnel() {
 # Returns 0 if sshd detected, 1 otherwise
 check_devcontainer_sshd() {
   local container_id="$1"
-  local dc_ip
-  dc_ip=$(docker inspect --format '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' "$container_id" 2>/dev/null | head -1)
-  [[ -n "$dc_ip" ]] && _timeout 2 bash -c "echo >/dev/tcp/$dc_ip/22" 2>/dev/null
+  # Check from inside container (Docker Desktop on Mac can't reach container IPs)
+  docker exec "$container_id" sh -c 'nc -z localhost 22 2>/dev/null || ss -tln 2>/dev/null | grep -q ":22 "' 2>/dev/null
 }
 
 # Ensure SSH tunnel is set up for a project
@@ -410,15 +422,17 @@ ensure_ssh_tunnel() {
   fi
 
   # Check if devcontainer has sshd running before creating anything
+  # Check if sshd is running in the devcontainer
+  if ! check_devcontainer_sshd "$dc_id"; then
+    # sshd not running - don't create .work-lab/ (user hasn't enabled sshd feature)
+    return 0
+  fi
+
+  # Get container IP for SSH connection
   local dc_ip
   dc_ip=$(docker inspect --format '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' "$dc_id" 2>/dev/null | head -1)
 
   if [[ -z "$dc_ip" ]]; then
-    return 0
-  fi
-
-  if ! _timeout 2 bash -c "echo >/dev/tcp/$dc_ip/22" 2>/dev/null; then
-    # sshd not running - don't create .work-lab/ (user hasn't enabled sshd feature)
     return 0
   fi
 
@@ -610,11 +624,11 @@ cmd_ps() {
       # show devcontainer with SSH tunnel status
       local ssh_indicator=""
       if check_project_ssh_tunnel "$project"; then
-        ssh_indicator="${C_PASS}⚡${C_RESET}"  # tunnel configured
-      elif check_devcontainer_sshd "$dc_id"; then
-        ssh_indicator="${C_WARN}~${C_RESET}"  # sshd available, not configured
+        ssh_indicator="${C_SSH}⚡${C_RESET}"  # tunnel ready
+      elif ! check_devcontainer_sshd "$dc_id"; then
+        ssh_indicator="${C_WARN}⚠${C_RESET}"  # cannot tunnel (no sshd)
       fi
-      printf "  └─ ${C_DIM}devcontainer${C_RESET}  ${C_DIM}%s${C_RESET}  ${C_PASS}●${C_RESET} %b ${C_DIM}%s${C_RESET}\n" "${dc_id:0:12}" "$ssh_indicator" "${container_name[$dc_id]}"
+      printf "  └─ ${C_DIM}devcontainer${C_RESET}  ${C_DIM}%s${C_RESET}  ${C_PASS}●${C_RESET}  ${C_DIM}%s${C_RESET} %b\n" "${dc_id:0:12}" "${container_name[$dc_id]}" "$ssh_indicator"
     elif (( wl_count > 0 )); then
       # Only work-lab(s), no devcontainer running
       local project_has_dc=0
@@ -652,11 +666,11 @@ cmd_ps() {
       # show devcontainer with SSH tunnel status
       local ssh_indicator=""
       if check_project_ssh_tunnel "$project"; then
-        ssh_indicator="${C_PASS}⚡${C_RESET}"  # tunnel configured
-      elif check_devcontainer_sshd "$dc_id"; then
-        ssh_indicator="${C_WARN}~${C_RESET}"  # sshd available, not configured
+        ssh_indicator="${C_SSH}⚡${C_RESET}"  # tunnel ready
+      elif ! check_devcontainer_sshd "$dc_id"; then
+        ssh_indicator="${C_WARN}⚠${C_RESET}"  # cannot tunnel (no sshd)
       fi
-      printf "  └─ ${C_DIM}devcontainer${C_RESET}  ${C_DIM}%s${C_RESET}  ${C_PASS}●${C_RESET} %b ${C_DIM}%s${C_RESET}\n" "${dc_id:0:12}" "$ssh_indicator" "${container_name[$dc_id]}"
+      printf "  └─ ${C_DIM}devcontainer${C_RESET}  ${C_DIM}%s${C_RESET}  ${C_PASS}●${C_RESET}  ${C_DIM}%s${C_RESET} %b\n" "${dc_id:0:12}" "${container_name[$dc_id]}" "$ssh_indicator"
     else
       # Both stopped (current project with .devcontainer but nothing running)
       printf "  ├─ ${C_DIM}work-lab${C_RESET}      ${C_DIM}────────────${C_RESET}  ${C_WARN}○${C_RESET}  ${C_WARN}stopped${C_RESET}\n"
@@ -665,7 +679,7 @@ cmd_ps() {
   done
 
   echo ""
-  print_dim "Legend: ● running  ○ stopped  ⚡ tunnel ready  ~ can tunnel (wl mux)"
+  printf "${C_DIM}Legend: ${C_PASS}●${C_DIM} running  ${C_WARN}○${C_DIM} stopped  ${C_SSH}⚡${C_DIM} tunnel ready  ${C_WARN}⚠${C_DIM} no sshd${C_RESET}\n"
 }
 
 cmd_up() {

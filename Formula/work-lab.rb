@@ -34,8 +34,8 @@ class WorkLab < Formula
 
       To get started:
         work-lab doctor   # Check your environment
-        work-lab up       # Start the container
-        work-lab tmux     # Attach to tmux session
+        work-lab start    # Start the container
+        work-lab mux      # Attach to tmux session
 
       Optional: Create custom hooks in ~/.config/work-lab/
         post-create.sh    # Runs once after container creation

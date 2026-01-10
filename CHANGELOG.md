@@ -6,6 +6,24 @@ All notable changes to work-lab will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.0] - 2026-01-09
+
+### Changed
+
+- **Command rename**: `wl up` → `wl start` (clearer intent, `wl stop` unchanged)
+- Clearer messaging: tips (`*`) show features, actions (`→`) tell you what to do next
+
+### Added
+
+- `wl doctor` now works inside container (shows container-specific diagnostics)
+- Docker image availability check before `wl start`
+
+### Fixed
+
+- `wl ps` shows current project even when no containers running
+- Works on stock macOS without coreutils
+- Better error messages for config file issues
+
 ## [0.4.0] - 2026-01-09
 
 ### Fixed

@@ -26,6 +26,22 @@ References:
   - First number reserved for major/stable releases
 - Keep `CHANGELOG.md` up to date with each release
 
+## Release Notes
+
+Focus on **user impact**, not implementation details:
+
+**Good:**
+- `wl up` renamed to `wl start`
+- `wl doctor` works inside container
+- Works on stock macOS without coreutils
+
+**Bad (too technical):**
+- Added `_timeout()` portable wrapper function
+- Fixed `((errors++))` under `set -e` with `|| true`
+- Added `C_ACTION` semantic color variable
+
+Rule: If a user wouldn't notice the change while using the tool, don't mention it.
+
 ## Releases
 
 **IMPORTANT: Agents MUST get explicit human confirmation BEFORE:**

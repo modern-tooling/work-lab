@@ -97,6 +97,7 @@ C_WARNING="$C_WARN"       # warning messages
 C_MUTED="$C_DIM"          # muted/secondary text
 C_TIP="$C_CYAN"           # tips: enlighten user about features
 C_ACTION="$C_WARN"        # actions: instruct user what to do next
+C_SSH="$C_CYAN"           # SSH tunnel ready (bright blue)
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Styled output functions
