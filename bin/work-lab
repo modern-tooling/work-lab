@@ -1107,7 +1107,7 @@ cmd_ports() {
 
   local found_ports=false
 
-  # Check work-lab container ports
+  # Check work-lab container ports (docker -p published ports)
   local wl_container_id
   wl_container_id=$(find_container 2>/dev/null)
   if [[ -n "$wl_container_id" ]]; then
@@ -1131,12 +1131,13 @@ cmd_ports() {
     dc_container_id=$(docker ps --filter "label=devcontainer.local_folder=$project_root" \
       --format '{{.ID}}' 2>/dev/null | head -1)
 
+    # Check docker published ports first
     if [[ -n "$dc_container_id" ]]; then
       local dc_ports
       dc_ports=$(docker port "$dc_container_id" 2>/dev/null)
       if [[ -n "$dc_ports" ]]; then
         [[ "$found_ports" == "true" ]] && echo ""
-        subheader "devcontainer"
+        subheader "devcontainer (published)"
         while IFS= read -r line; do
           local container_port host_port
           container_port=$(echo "$line" | cut -d' ' -f1 | cut -d'/' -f1)
@@ -1146,11 +1147,45 @@ cmd_ports() {
         found_ports=true
       fi
     fi
+
+    # Check devcontainer.json for forwardPorts configuration
+    local dc_config=""
+    if [[ -f "$project_root/.devcontainer/devcontainer.json" ]]; then
+      dc_config="$project_root/.devcontainer/devcontainer.json"
+    elif [[ -f "$project_root/.devcontainer.json" ]]; then
+      dc_config="$project_root/.devcontainer.json"
+    fi
+
+    if [[ -n "$dc_config" ]] && command -v jq &>/dev/null; then
+      local forward_ports
+      # Extract forwardPorts array, handling both number and string formats
+      # Use grep to strip comments first (devcontainer.json allows // comments)
+      forward_ports=$(grep -v '^\s*//' "$dc_config" 2>/dev/null | jq -r '.forwardPorts // [] | .[]' 2>/dev/null | grep -v '^$') || true
+      if [[ -n "$forward_ports" ]]; then
+        [[ "$found_ports" == "true" ]] && echo ""
+        subheader "devcontainer (forwardPorts)"
+        while IFS= read -r port; do
+          # Handle "host:container" format or just port number
+          if [[ "$port" == *:* ]]; then
+            local host_port container_port
+            host_port="${port%%:*}"
+            container_port="${port##*:}"
+            printf "  ${C_COMMAND}%s${C_RESET} ${C_DIM}→${C_RESET} ${C_ACCENT}localhost:%s${C_RESET}\n" "$container_port" "$host_port"
+          else
+            printf "  ${C_COMMAND}%s${C_RESET} ${C_DIM}→${C_RESET} ${C_ACCENT}localhost:%s${C_RESET}\n" "$port" "$port"
+          fi
+        done <<< "$forward_ports"
+        found_ports=true
+        detail "Ports forwarded when attached via VS Code"
+      fi
+    fi
   fi
 
   if [[ "$found_ports" == "false" ]]; then
-    status_info "No ports forwarded"
-    detail "Ports are forwarded automatically when services bind to them"
+    status_info "No ports configured"
+    if [[ -n "$project_root" ]] && has_devcontainer "$project_root"; then
+      detail "Add forwardPorts to devcontainer.json"
+    fi
   fi
 }
 
