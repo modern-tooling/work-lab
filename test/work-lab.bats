@@ -99,11 +99,13 @@ load_functions() {
 @test "help lists all expected commands" {
   run "$PROJECT_ROOT/bin/work-lab" help
   [ "$status" -eq 0 ]
-  [[ "$output" == *"up"* ]]
+  [[ "$output" == *"start"* ]]
   [[ "$output" == *"shell"* ]]
   [[ "$output" == *"mux"* ]]
   [[ "$output" == *"stop"* ]]
   [[ "$output" == *"ps"* ]]
+  [[ "$output" == *"ports"* ]]
+  [[ "$output" == *"prune"* ]]
   [[ "$output" == *"dc"* ]]
   [[ "$output" == *"doctor"* ]]
   [[ "$output" == *"version"* ]]
@@ -468,10 +470,13 @@ EOF
   [ -f "$TEMP_DIR/test-project/.devcontainer.json" ]
 }
 
-@test "doctor runs without error in real git repo" {
+@test "doctor runs and produces output in real git repo" {
   cd "$PROJECT_ROOT"
   run "$PROJECT_ROOT/bin/work-lab" doctor 2>&1
-  [ "$status" -eq 0 ]
+  # doctor may return non-zero if dependencies missing (e.g., docker not running in CI)
+  # but should always produce output
+  [ -n "$output" ]
+  [[ "$output" == *"work-lab doctor"* ]] || [[ "$output" == *"Installation"* ]]
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
