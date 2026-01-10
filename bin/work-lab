@@ -209,7 +209,7 @@ usage() {
   echo ""
   print_accent "Commands:"
   printf "  ${C_COMMAND}%-14s${C_RESET} %s\n" "start" "Start work-lab for the current git project"
-  printf "  ${C_COMMAND}%-14s${C_RESET} %s\n" "mux" "Attach to tmux session ${C_DIM}(recommended)${C_RESET}"
+  printf "  ${C_COMMAND}%-14s${C_RESET} Attach to tmux session ${C_DIM}(recommended)${C_RESET}\n" "mux"
   printf "  ${C_COMMAND}%-14s${C_RESET} %s\n" "shell" "Run a one-off shell command"
   printf "  ${C_COMMAND}%-14s${C_RESET} %s\n" "stop" "Stop the container"
   printf "  ${C_COMMAND}%-14s${C_RESET} %s\n" "rebuild" "Stop, remove, and start fresh container"
