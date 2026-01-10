@@ -39,8 +39,14 @@ fi
 # check SSH tunnel connectivity (docker not available in work-lab)
 if [[ -f /workspaces/project/.work-lab/ip ]]; then
   dc_ip=$(cat /workspaces/project/.work-lab/ip 2>/dev/null)
-  if [[ -n "$dc_ip" ]] && nc -z -w 1 "$dc_ip" 22 2>/dev/null; then
-    dc_connected=true
+  dc_port=$(cat /workspaces/project/.work-lab/port 2>/dev/null || echo "2222")
+  if [[ -n "$dc_ip" ]]; then
+    # try configured port, then fallback to 2222 and 22
+    if nc -z -w 1 "$dc_ip" "$dc_port" 2>/dev/null || \
+       nc -z -w 1 "$dc_ip" 2222 2>/dev/null || \
+       nc -z -w 1 "$dc_ip" 22 2>/dev/null; then
+      dc_connected=true
+    fi
   fi
 fi
 

@@ -155,15 +155,27 @@ main() {
   dc_user="${dc_user:-vscode}"
 
   log_info "Connecting to devcontainer..."
-  log_info "  IP: $dc_ip"
-  log_info "  User: $dc_user"
 
-  # test connectivity first
-  if ! timeout 2 bash -c "echo >/dev/tcp/$dc_ip/22" 2>/dev/null; then
-    log_error "Cannot reach devcontainer at $dc_ip:22"
-    log_hint "Is the devcontainer running with sshd enabled?"
-    exit 1
+  # detect SSH port (devcontainer sshd feature uses 2222, standard is 22)
+  local ssh_port=""
+  if [[ -f "$WORKLAB_DIR/port" ]]; then
+    ssh_port=$(cat "$WORKLAB_DIR/port" 2>/dev/null | tr -d '[:space:]')
   fi
+  if [[ -z "$ssh_port" ]]; then
+    # auto-detect: try 2222 first (devcontainer feature default), then 22
+    if timeout 2 bash -c "echo >/dev/tcp/$dc_ip/2222" 2>/dev/null; then
+      ssh_port=2222
+    elif timeout 2 bash -c "echo >/dev/tcp/$dc_ip/22" 2>/dev/null; then
+      ssh_port=22
+    else
+      log_error "Cannot reach devcontainer at $dc_ip (tried ports 22 and 2222)"
+      log_hint "Is the devcontainer running with sshd enabled?"
+      exit 1
+    fi
+  fi
+
+  log_info "  Host: $dc_ip:$ssh_port"
+  log_info "  User: $dc_user"
 
   # find workspace directory (try common patterns)
   local project_name workspace_dir
@@ -172,6 +184,7 @@ main() {
   # prepare SSH options
   local -a ssh_opts=(
     "-i" "$ssh_key"
+    "-p" "$ssh_port"
     "-o" "StrictHostKeyChecking=accept-new"
     "-o" "UserKnownHostsFile=/tmp/dc-ssh-known-hosts-$$"
     "-o" "ConnectTimeout=5"

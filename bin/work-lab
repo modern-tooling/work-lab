@@ -6,7 +6,7 @@
 
 set -Eeuo pipefail
 
-VERSION="0.9.0"
+VERSION="0.10.0"
 
 # shellcheck disable=SC2155
 readonly SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
@@ -416,10 +416,12 @@ check_project_ssh_tunnel() {
 
 # Check if a devcontainer has sshd available (quick port probe)
 # Returns 0 if sshd detected, 1 otherwise
+# Note: devcontainer sshd feature uses port 2222, not 22
 check_devcontainer_sshd() {
   local container_id="$1"
   # Check from inside container (Docker Desktop on Mac can't reach container IPs)
-  docker exec "$container_id" sh -c 'nc -z localhost 22 2>/dev/null || ss -tln 2>/dev/null | grep -q ":22 "' 2>/dev/null
+  # Check both port 22 (standard) and 2222 (devcontainer sshd feature default)
+  docker exec "$container_id" sh -c 'ss -tln 2>/dev/null | grep -qE ":(22|2222) "' 2>/dev/null
 }
 
 # Ensure SSH tunnel is set up for a project
@@ -529,9 +531,18 @@ ensure_ssh_tunnel() {
   fi
   dc_user="${dc_user:-root}"
 
+  # Detect SSH port (devcontainer sshd feature uses 2222, standard is 22)
+  local ssh_port=""
+  if docker exec "$dc_id" sh -c 'ss -tln 2>/dev/null | grep -q ":2222 "' 2>/dev/null; then
+    ssh_port=2222
+  elif docker exec "$dc_id" sh -c 'ss -tln 2>/dev/null | grep -q ":22 "' 2>/dev/null; then
+    ssh_port=22
+  fi
+
   # Write connection info (using tunnel network IP)
   echo "$tunnel_ip" > "$ip_file"
   echo "$dc_user" > "$user_file"
+  [[ -n "$ssh_port" ]] && echo "$ssh_port" > "$worklab_dir/port"
 
   # Inject public key into devcontainer's authorized_keys (if not already there)
   local pubkey

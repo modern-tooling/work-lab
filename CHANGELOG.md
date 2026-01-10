@@ -6,6 +6,19 @@ All notable changes to work-lab will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.10.0] - 2026-01-10
+
+### Added
+
+- **tmux 3.5a**: Built from source for better clipboard and image support
+- **Clipboard integration**: `set-clipboard on` enables OSC 52 (copy to system clipboard)
+- **Image passthrough**: `allow-passthrough on` enables image protocols in tmux
+- **`claude-dsp` alias**: Shortcut for `claude --dangerously-skip-permissions`
+
+### Changed
+
+- **Terminal environment**: Container now exports `LANG`, `LC_ALL`, `TERM`, `COLORTERM` for proper Unicode and color detection
+
 ## [0.9.0] - 2026-01-10
 
 ### Fixed
@@ -182,6 +195,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Manual clone
 - Installed tools: tmux, git, curl, jq, ripgrep, fzf, Node.js 22 LTS, Claude CLI, Gastown, Beads
 
+[0.10.0]: https://github.com/modern-tooling/work-lab/releases/tag/v0.10.0
 [0.9.0]: https://github.com/modern-tooling/work-lab/releases/tag/v0.9.0
 [0.8.0]: https://github.com/modern-tooling/work-lab/releases/tag/v0.8.0
 [0.7.1]: https://github.com/modern-tooling/work-lab/releases/tag/v0.7.1
