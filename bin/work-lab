@@ -622,7 +622,6 @@ cmd_ps() {
   done
 
   echo ""
-  print_dim "$project_count project(s)"
   print_dim "Legend: ● running  ○ stopped  ⚡ tunnel ready  ~ can tunnel (wl mux)"
 }
 
