@@ -15,10 +15,12 @@ alias wl='work-lab'
 
 # One-time welcome guide in first tmux pane
 # Theme colors: cyan #50c8dc, sky blue #64a0dc, gold #ffd23c, dim #8c969f
-if [[ -n "$TMUX" && "$TMUX_PANE" == "%0" ]]; then
+# Check window:pane index (1:1 with base-index 1, pane-base-index 1)
+if [[ -n "$TMUX" ]]; then
+  _wl_pos=$(tmux display-message -p '#{window_index}:#{pane_index}' 2>/dev/null)
   _wl_session=$(tmux display-message -p '#S' 2>/dev/null)
   _wl_guide="/tmp/.work-lab-guide-${_wl_session}"
-  if [[ ! -f "$_wl_guide" ]]; then
+  if [[ "$_wl_pos" == "1:1" && ! -f "$_wl_guide" ]]; then
     touch "$_wl_guide"
     printf '\n'
     printf '  \e[38;2;80;200;220;1mwork-lab\e[0m \e[38;2;140;150;160mquick reference\e[0m\n'
@@ -37,7 +39,7 @@ if [[ -n "$TMUX" && "$TMUX_PANE" == "%0" ]]; then
     printf '          \e[38;2;255;210;60mbd\e[0m       beads task tracking\n'
     printf '\n'
   fi
-  unset _wl_session _wl_guide
+  unset _wl_pos _wl_session _wl_guide
 fi
 
 # Source user overrides if present
