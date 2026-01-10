@@ -72,11 +72,12 @@ _port_open() {
 
 # Additional mounts (arrays, set in config file)
 # Format: "source:target" - will be mounted read-only or read-write
-WORK_LAB_MOUNTS_RO=(
-  # Claude config (settings, API keys) - read-only for safety
+WORK_LAB_MOUNTS_RO=()    # read-only mounts
+WORK_LAB_MOUNTS_RW=(
+  # Claude config (settings, API keys, session tokens)
+  # Read-write so Claude CLI can persist authentication
   "$HOME/.claude:/home/worklab/.claude"
 )
-WORK_LAB_MOUNTS_RW=()    # read-write mounts
 
 # Source user config if present (can override defaults above)
 # SECURITY NOTE: Config is user-controlled. Path traversal in mounts is
