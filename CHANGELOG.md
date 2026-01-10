@@ -17,6 +17,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `prefix + W` saves session layout to project's `.work-lab/` directory
   - `wl mux` auto-restores saved layout when creating new session
 
+### Fixed
+
+- **beads**: Now correctly installed via `go install` (was npm package with same name)
+
 ## [0.6.0] - 2026-01-09
 
 ### Added

@@ -35,6 +35,7 @@ if [[ -n "$TMUX" && "$TMUX_PANE" == "%0" ]]; then
     printf '\n'
     printf '  \e[38;2;100;160;220mai\e[0m      \e[38;2;255;210;60mgt\e[0m       gastown orchestrator\n'
     printf '          \e[38;2;255;210;60mclaude\e[0m   Claude Code CLI\n'
+    printf '          \e[38;2;255;210;60mbeads\e[0m    task tracking\n'
     printf '\n'
   fi
   unset _wl_session _wl_guide
