@@ -212,6 +212,7 @@ usage() {
   printf "  ${C_COMMAND}%-14s${C_RESET} %s\n" "mux" "Attach to tmux session ${C_DIM}(recommended)${C_RESET}"
   printf "  ${C_COMMAND}%-14s${C_RESET} %s\n" "shell" "Run a one-off shell command"
   printf "  ${C_COMMAND}%-14s${C_RESET} %s\n" "stop" "Stop the container"
+  printf "  ${C_COMMAND}%-14s${C_RESET} %s\n" "rebuild" "Stop, remove, and start fresh container"
   printf "  ${C_COMMAND}%-14s${C_RESET} %s\n" "ps" "List running work-lab containers"
   printf "  ${C_COMMAND}%-14s${C_RESET} %s\n" "dc <cmd>" "Run command in project's devcontainer"
   printf "  ${C_COMMAND}%-14s${C_RESET} %s\n" "doctor" "Check environment and configuration"
@@ -885,6 +886,23 @@ cmd_stop() {
   status_ok "Stopped"
 }
 
+cmd_rebuild() {
+  require_host
+
+  local container_id
+  container_id=$(find_container)
+
+  if [[ -n "$container_id" ]]; then
+    activity "Stopping and removing old container..."
+    docker rm -f "$container_id" > /dev/null 2>&1
+    status_ok "Removed old container"
+  fi
+
+  # Start fresh with (potentially updated) image
+  activity "Starting fresh container..."
+  cmd_up
+}
+
 # Run command in associated project devcontainer (from inside work-lab or host)
 cmd_dc() {
   local cmd="${1:-}"
@@ -1541,6 +1559,9 @@ case "${1:-}" in
     ;;
   stop|down)
     cmd_stop
+    ;;
+  rebuild)
+    cmd_rebuild
     ;;
   ps)
     cmd_ps
