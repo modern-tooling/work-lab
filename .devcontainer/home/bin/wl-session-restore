@@ -1,0 +1,50 @@
+#!/bin/bash
+# wl-session-restore - restore tmux session layout from saved snapshot
+# Restores from /workspaces/project/.work-lab/tmux-session
+
+set -euo pipefail
+
+SESSION="${1:-lab}"
+PROJECT_DIR="/workspaces/project"
+SESSION_FILE="$PROJECT_DIR/.work-lab/tmux-session"
+
+if [[ ! -f "$SESSION_FILE" ]]; then
+  echo "No saved session found at $SESSION_FILE"
+  exit 1
+fi
+
+# Check if session already exists
+if tmux has-session -t "$SESSION" 2>/dev/null; then
+  echo "Session '$SESSION' already exists"
+  exit 0
+fi
+
+# Create session with first window
+first_window=true
+project_name=$(basename "$PROJECT_DIR")
+
+while IFS='|' read -r type idx name layout path; do
+  [[ "$type" != "window" ]] && continue
+  [[ -z "$idx" ]] && continue
+
+  # Use project directory if saved path doesn't exist
+  if [[ ! -d "$path" ]]; then
+    path="$PROJECT_DIR"
+  fi
+
+  if [[ "$first_window" == "true" ]]; then
+    # Create session with first window
+    tmux new-session -d -s "$SESSION" -n "$name" -c "$path"
+    first_window=false
+  else
+    # Add additional windows
+    tmux new-window -t "$SESSION" -n "$name" -c "$path"
+  fi
+
+  # Apply layout if it's a valid layout string
+  if [[ "$layout" =~ ^[0-9]+x[0-9]+ ]]; then
+    tmux select-layout -t "$SESSION:$name" "$layout" 2>/dev/null || true
+  fi
+done < "$SESSION_FILE"
+
+echo "Session '$SESSION' restored"

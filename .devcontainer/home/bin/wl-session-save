@@ -1,0 +1,30 @@
+#!/bin/bash
+# wl-session-save - save tmux session layout for restoration after rebuilds
+# Saves to /workspaces/project/.work-lab/tmux-session so it persists on host
+
+set -euo pipefail
+
+SESSION="${1:-lab}"
+PROJECT_DIR="/workspaces/project"
+SESSION_FILE="$PROJECT_DIR/.work-lab/tmux-session"
+
+if ! tmux has-session -t "$SESSION" 2>/dev/null; then
+  echo "Session '$SESSION' not found"
+  exit 1
+fi
+
+mkdir -p "$PROJECT_DIR/.work-lab"
+
+# Save session layout
+{
+  echo "# work-lab tmux session snapshot"
+  echo "# Created: $(date -Iseconds)"
+  echo ""
+
+  # Get windows and their layouts
+  tmux list-windows -t "$SESSION" -F '#{window_index}|#{window_name}|#{window_layout}|#{pane_current_path}' | while IFS='|' read -r idx name layout path; do
+    echo "window|$idx|$name|$layout|$path"
+  done
+} > "$SESSION_FILE"
+
+echo "Session saved to $SESSION_FILE"

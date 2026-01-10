@@ -679,3 +679,190 @@ EOF
   [ "$status" -ne 0 ]  # should NOT find 'command -v' in docker exec calls
 }
 
+@test "mux command accepts optional project name argument" {
+  # Verify mux passes arguments to cmd_mux
+  run grep -E 'mux\|tmux\)' -A3 "$PROJECT_ROOT/bin/work-lab"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *'cmd_mux "$@"'* ]]
+}
+
+@test "find_container_by_name function is defined in work-lab" {
+  run grep -q 'find_container_by_name()' "$PROJECT_ROOT/bin/work-lab"
+  [ "$status" -eq 0 ]
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Prune Command Tests
+# ─────────────────────────────────────────────────────────────────────────────
+
+@test "prune command is registered" {
+  run grep -E 'prune\)' "$PROJECT_ROOT/bin/work-lab"
+  [ "$status" -eq 0 ]
+}
+
+@test "cmd_prune function is defined in work-lab" {
+  run grep -q 'cmd_prune()' "$PROJECT_ROOT/bin/work-lab"
+  [ "$status" -eq 0 ]
+}
+
+@test "prune supports --all flag" {
+  run grep -E 'prune_all=true' "$PROJECT_ROOT/bin/work-lab"
+  [ "$status" -eq 0 ]
+  run grep -E '\-\-all.*-a' "$PROJECT_ROOT/bin/work-lab"
+  [ "$status" -eq 0 ]
+}
+
+@test "prune runs without error when no containers to clean" {
+  # Mock docker to return empty
+  cat > "$MOCK_BIN/docker" << 'EOF'
+#!/bin/bash
+if [[ "$1" == "ps" ]]; then
+  echo ""
+  exit 0
+fi
+if [[ "$1" == "images" ]]; then
+  echo ""
+  exit 0
+fi
+exit 0
+EOF
+  chmod +x "$MOCK_BIN/docker"
+  export PATH="$MOCK_BIN:$PATH"
+
+  run "$PROJECT_ROOT/bin/work-lab" prune 2>&1
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"No stopped"* ]] || [[ "$output" == *"Prune complete"* ]]
+}
+
+@test "help shows prune command" {
+  run "$PROJECT_ROOT/bin/work-lab" help
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"prune"* ]]
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Ports Command Tests
+# ─────────────────────────────────────────────────────────────────────────────
+
+@test "ports command is registered" {
+  run grep -E 'ports\)' "$PROJECT_ROOT/bin/work-lab"
+  [ "$status" -eq 0 ]
+}
+
+@test "cmd_ports function is defined in work-lab" {
+  run grep -q 'cmd_ports()' "$PROJECT_ROOT/bin/work-lab"
+  [ "$status" -eq 0 ]
+}
+
+@test "ports runs without error when no containers" {
+  # Mock docker to return empty
+  cat > "$MOCK_BIN/docker" << 'EOF'
+#!/bin/bash
+if [[ "$1" == "ps" ]]; then
+  echo ""
+  exit 0
+fi
+if [[ "$1" == "port" ]]; then
+  echo ""
+  exit 0
+fi
+exit 0
+EOF
+  chmod +x "$MOCK_BIN/docker"
+  export PATH="$MOCK_BIN:$PATH"
+
+  cd "$PROJECT_ROOT"
+  run "$PROJECT_ROOT/bin/work-lab" ports 2>&1
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"Forwarded ports"* ]] || [[ "$output" == *"No ports"* ]]
+}
+
+@test "help shows ports command" {
+  run "$PROJECT_ROOT/bin/work-lab" help
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"ports"* ]]
+}
+
+@test "ports shows both work-lab and devcontainer ports" {
+  # Check the function looks for both containers
+  run grep -A30 'cmd_ports()' "$PROJECT_ROOT/bin/work-lab"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"wl_container_id"* ]]
+  [[ "$output" == *"dc_container_id"* ]]
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# VSCode Command Tests
+# ─────────────────────────────────────────────────────────────────────────────
+
+@test "vscode command is registered" {
+  run grep -E 'vscode\|code\)' "$PROJECT_ROOT/bin/work-lab"
+  [ "$status" -eq 0 ]
+}
+
+@test "cmd_vscode function is defined in work-lab" {
+  run grep -q 'cmd_vscode()' "$PROJECT_ROOT/bin/work-lab"
+  [ "$status" -eq 0 ]
+}
+
+@test "vscode command uses code CLI" {
+  run grep -A20 'cmd_vscode()' "$PROJECT_ROOT/bin/work-lab"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"code"* ]]
+}
+
+@test "vscode fails when container not running" {
+  # Mock docker to return empty
+  cat > "$MOCK_BIN/docker" << 'EOF'
+#!/bin/bash
+echo ""
+exit 0
+EOF
+  chmod +x "$MOCK_BIN/docker"
+  export PATH="$MOCK_BIN:$PATH"
+
+  cd "$PROJECT_ROOT"
+  run "$PROJECT_ROOT/bin/work-lab" vscode 2>&1
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"not running"* ]] || [[ "$output" == *"No work-lab"* ]]
+}
+
+@test "help shows vscode command" {
+  run "$PROJECT_ROOT/bin/work-lab" help
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"vscode"* ]]
+}
+
+@test "code alias works for vscode command" {
+  # Verify both vscode and code are handled
+  run grep -E 'vscode\|code\)' "$PROJECT_ROOT/bin/work-lab"
+  [ "$status" -eq 0 ]
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Session Restore Tests
+# ─────────────────────────────────────────────────────────────────────────────
+
+@test "wl-session-save script exists and is executable" {
+  [ -f "$PROJECT_ROOT/.devcontainer/home/bin/wl-session-save" ]
+  [ -x "$PROJECT_ROOT/.devcontainer/home/bin/wl-session-save" ]
+}
+
+@test "wl-session-restore script exists and is executable" {
+  [ -f "$PROJECT_ROOT/.devcontainer/home/bin/wl-session-restore" ]
+  [ -x "$PROJECT_ROOT/.devcontainer/home/bin/wl-session-restore" ]
+}
+
+@test "tmux config includes session save keybinding" {
+  run grep 'bind W' "$PROJECT_ROOT/.devcontainer/home/.tmux.conf"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"wl-session-save"* ]]
+}
+
+@test "cmd_mux checks for saved session" {
+  run grep -A20 'case "\$WORK_LAB_MUX"' "$PROJECT_ROOT/bin/work-lab"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"tmux-session"* ]]
+  [[ "$output" == *"wl-session-restore"* ]]
+}
+

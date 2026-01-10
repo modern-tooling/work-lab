@@ -6,6 +6,18 @@ All notable changes to work-lab will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.0] - 2026-01-09
+
+### Added
+
+- **`wl mux [project]`**: Attach to any running work-lab by project name (not just current directory)
+- **`wl ports`**: Show forwarded ports for work-lab and paired devcontainer
+- **`wl vscode`**: Open VS Code attached to the work-lab container
+- **`wl prune`**: Clean up stopped work-lab containers (use `--all` for images too)
+- **Session restore**: tmux layout persists across container rebuilds
+  - `prefix + W` saves session layout to project's `.work-lab/` directory
+  - `wl mux` auto-restores saved layout when creating new session
+
 ## [0.6.0] - 2026-01-09
 
 ### Added
@@ -136,6 +148,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Manual clone
 - Installed tools: tmux, git, curl, jq, ripgrep, fzf, Node.js 22 LTS, Claude CLI, Gastown, Beads
 
+[0.7.0]: https://github.com/modern-tooling/work-lab/releases/tag/v0.7.0
+[0.6.0]: https://github.com/modern-tooling/work-lab/releases/tag/v0.6.0
+[0.5.0]: https://github.com/modern-tooling/work-lab/releases/tag/v0.5.0
 [0.4.0]: https://github.com/modern-tooling/work-lab/releases/tag/v0.4.0
 [0.3.0]: https://github.com/modern-tooling/work-lab/releases/tag/v0.3.0
 [0.2.0]: https://github.com/modern-tooling/work-lab/releases/tag/v0.2.0
