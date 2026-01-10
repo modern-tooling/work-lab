@@ -1,15 +1,6 @@
 {
   "name": "work-lab",
   "image": "ghcr.io/modern-tooling/work-lab:latest",
-  "features": {
-    "ghcr.io/devcontainers/features/common-utils:2": {
-      "installZsh": true,
-      "installOhMyZsh": false,
-      "configureZshAsDefaultShell": false,
-      "username": "worklab"
-    },
-    "ghcr.io/devcontainers/features/github-cli:1": {}
-  },
   "workspaceFolder": "/workspaces/work-lab",
   "workspaceMount": "source=${localWorkspaceFolder},target=/workspaces/work-lab,type=bind,consistency=cached",
   "mounts": [

@@ -14,8 +14,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     # Terminal & shell
     tmux \
     tree \
+    zsh \
     # Version control
     git \
+    gh \
     # Text & data processing (Claude Code favorites)
     jq \
     ripgrep \
