@@ -26,6 +26,7 @@ if [[ -n "$TMUX" && "$TMUX_PANE" == "%0" ]]; then
     printf '\n'
     printf '  \e[38;2;100;160;220mtmux\e[0m    \e[38;2;140;150;160mCtrl-b c\e[0m new window  \e[38;2;60;70;80m│\e[0m  \e[38;2;140;150;160mCtrl-b %%\e[0m vsplit  \e[38;2;60;70;80m│\e[0m  \e[38;2;140;150;160mCtrl-b "\e[0m hsplit\n'
     printf '          \e[38;2;140;150;160mCtrl-b n/p\e[0m next/prev  \e[38;2;60;70;80m│\e[0m  \e[38;2;140;150;160mCtrl-b d\e[0m detach\n'
+    printf '          \e[38;2;140;150;160mCtrl-b D\e[0m devcontainer shell  \e[38;2;60;70;80m│\e[0m  \e[38;2;140;150;160mCtrl-b S\e[0m devcontainer ssh\n'
     printf '\n'
     printf '  \e[38;2;100;160;220mcli\e[0m     \e[38;2;255;210;60mwl --help\e[0m\n'
     if command -v code &>/dev/null; then
