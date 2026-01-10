@@ -93,5 +93,11 @@ RUN mkdir -p /opt/work-lab/bin /opt/work-lab/lib && \
 COPY .devcontainer/post-create.sh .devcontainer/post-start.sh /opt/work-lab/
 RUN chmod +x /opt/work-lab/*.sh
 
+# Terminal environment for proper color and Unicode support
+ENV LANG=C.UTF-8
+ENV LC_ALL=C.UTF-8
+ENV TERM=xterm-256color
+ENV COLORTERM=truecolor
+
 USER worklab
 WORKDIR /workspaces/project

@@ -6,6 +6,11 @@ PROMPT_EOL_MARK=''
 # Add work-lab bin and Go bin to PATH
 export PATH="$HOME/bin:$HOME/go/bin:$PATH"
 
+# Terminal environment (fallback if not set by container)
+export LANG="${LANG:-C.UTF-8}"
+export LC_ALL="${LC_ALL:-C.UTF-8}"
+export COLORTERM="${COLORTERM:-truecolor}"
+
 # Custom prompt: [work-lab] cyan, path sky blue, $ dim
 # Sky blue path distinguishes from white user text
 PROMPT='%F{#50c8dc}[work-lab]%f %F{#64a0dc}%~%f %F{#8c969f}$%f '

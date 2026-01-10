@@ -3,6 +3,11 @@
 # Add work-lab bin and Go bin to PATH
 export PATH="$HOME/bin:$HOME/go/bin:$PATH"
 
+# Terminal environment (fallback if not set by container)
+export LANG="${LANG:-C.UTF-8}"
+export LC_ALL="${LC_ALL:-C.UTF-8}"
+export COLORTERM="${COLORTERM:-truecolor}"
+
 # Custom prompt: [work-lab] cyan, path sky blue, $ dim
 # Sky blue path distinguishes from white user text
 PS1='\[\e[38;2;80;200;220m\][work-lab]\[\e[0m\] \[\e[38;2;100;160;220m\]\w\[\e[0m\] \[\e[38;2;140;150;160m\]$\[\e[0m\] '

@@ -2073,6 +2073,28 @@ cmd_doctor() {
   config_dir="$HOME/.config/work-lab"
   if [[ -f "$config_dir/config" ]]; then
     status_ok "config file: $config_dir/config"
+    # Check if config is newer than running container
+    local container_id
+    container_id=$(find_container)
+    if [[ -n "$container_id" ]]; then
+      local config_mtime container_epoch container_ts clean_ts
+      config_mtime=$(stat -f %m "$config_dir/config" 2>/dev/null || stat -c %Y "$config_dir/config" 2>/dev/null)
+      # Get container creation time and convert UTC to epoch
+      container_ts=$(docker inspect --format '{{.Created}}' "$container_id" 2>/dev/null)
+      if [[ -n "$container_ts" ]]; then
+        # Strip fractional seconds and Z, replace T with space
+        clean_ts=$(echo "$container_ts" | sed 's/\.[0-9]*Z$//' | sed 's/T/ /')
+        # Parse as UTC (macOS vs Linux)
+        container_epoch=$(TZ=UTC date -j -f "%Y-%m-%d %H:%M:%S" "$clean_ts" +%s 2>/dev/null || date -d "$clean_ts UTC" +%s 2>/dev/null) || container_epoch=0
+      fi
+      if [[ -n "$config_mtime" ]] && (( container_epoch > 0 )); then
+        if (( config_mtime > container_epoch )); then
+          status_warn "config updated since container was created"
+          action "Apply changes: ${C_COMMAND}wl rebuild${C_ACTION}"
+          ((errors++)) || true
+        fi
+      fi
+    fi
   else
     status_info "config file: not found (using defaults)"
   fi
@@ -2144,6 +2166,23 @@ cmd_doctor() {
           status_warn "$src_path ${ICON_ARROW} $tgt_path (rw) - source not found"
         fi
       done
+    fi
+  fi
+
+  # Check for ~/.claude credentials that should be mounted
+  if [[ -d "$HOME/.claude" ]]; then
+    local claude_mounted=false
+    for mount_spec in "${WORK_LAB_MOUNTS_RO[@]}" "${WORK_LAB_MOUNTS_RW[@]}"; do
+      if [[ "$mount_spec" == *".claude:"* ]]; then
+        claude_mounted=true
+        break
+      fi
+    done
+    if ! $claude_mounted; then
+      status_warn "~/.claude exists but not mounted"
+      tip "Share Claude credentials: add to ${C_COMMAND}~/.config/work-lab/config${C_TIP}:"
+      detail "WORK_LAB_MOUNTS_RW+=(\"\$HOME/.claude:/home/worklab/.claude\")"
+      ((errors++)) || true
     fi
   fi
 
