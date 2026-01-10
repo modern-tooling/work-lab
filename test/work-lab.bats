@@ -645,3 +645,37 @@ EOF
   [ "$status" -eq 0 ]
 }
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Mux Command Tests
+# ─────────────────────────────────────────────────────────────────────────────
+
+@test "mux command uses 'which' not 'command -v' for tmux detection" {
+  # command -v is a shell builtin and fails via docker exec without a shell wrapper
+  # must use 'which' which is an actual binary
+  run grep -E 'docker exec.*which.*WORK_LAB_MUX' "$PROJECT_ROOT/bin/work-lab"
+  [ "$status" -eq 0 ]
+}
+
+@test "mux command fails when container not running" {
+  # Mock docker to return no container
+  cat > "$MOCK_BIN/docker" << 'EOF'
+#!/bin/bash
+echo ""
+exit 0
+EOF
+  chmod +x "$MOCK_BIN/docker"
+  export PATH="$MOCK_BIN:$PATH"
+
+  cd "$PROJECT_ROOT"
+  run "$PROJECT_ROOT/bin/work-lab" mux 2>&1
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"not running"* ]] || [[ "$output" == *"No work-lab"* ]]
+}
+
+@test "mux does not use 'command -v' which fails in docker exec" {
+  # Verify work-lab doesn't use 'command -v' for mux detection
+  # because 'command' is a shell builtin, not an executable
+  run grep -E 'docker exec.*command -v' "$PROJECT_ROOT/bin/work-lab"
+  [ "$status" -ne 0 ]  # should NOT find 'command -v' in docker exec calls
+}
+

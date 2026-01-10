@@ -44,6 +44,7 @@ if _supports_color; then
       C_FAIL='\033[38;2;180;60;60m'       # brick red
       C_DIM='\033[38;2;120;130;140m'      # slate gray
       C_CYAN='\033[38;2;40;140;160m'      # teal
+      C_CURRENT='\033[38;2;200;160;0m'    # vivid gold
     else
       # Dark mode colors (lighter for contrast)
       C_PRIMARY='\033[38;2;100;160;220m'  # sky blue
@@ -53,6 +54,7 @@ if _supports_color; then
       C_FAIL='\033[38;2;230;100;100m'     # coral red
       C_DIM='\033[38;2;140;150;160m'      # soft gray
       C_CYAN='\033[38;2;80;200;220m'      # bright cyan
+      C_CURRENT='\033[38;2;255;210;60m'   # bright gold
     fi
   else
     # ANSI 256 fallback
@@ -63,12 +65,13 @@ if _supports_color; then
     C_FAIL='\033[38;5;167m'     # coral
     C_DIM='\033[38;5;245m'      # gray
     C_CYAN='\033[38;5;80m'      # cyan
+    C_CURRENT='\033[38;5;220m'  # bright yellow
   fi
   C_BOLD='\033[1m'
   C_RESET='\033[0m'
 else
   # No color support
-  C_PRIMARY='' C_ACCENT='' C_PASS='' C_WARN='' C_FAIL='' C_DIM='' C_CYAN=''
+  C_PRIMARY='' C_ACCENT='' C_PASS='' C_WARN='' C_FAIL='' C_DIM='' C_CYAN='' C_CURRENT=''
   C_BOLD='' C_RESET=''
 fi
 

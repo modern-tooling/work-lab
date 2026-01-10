@@ -6,7 +6,7 @@
 
 set -Eeuo pipefail
 
-VERSION="0.5.0"
+VERSION="0.6.0"
 
 # shellcheck disable=SC2155
 readonly SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
@@ -215,7 +215,7 @@ usage() {
   printf "  ${C_COMMAND}%-14s${C_RESET} %s\n" "ps" "List running work-lab containers"
   printf "  ${C_COMMAND}%-14s${C_RESET} %s\n" "dc <cmd>" "Run command in project's devcontainer"
   printf "  ${C_COMMAND}%-14s${C_RESET} %s\n" "doctor" "Check environment and configuration"
-  printf "  ${C_COMMAND}%-14s${C_RESET} %s\n" "upgrade" "Upgrade to latest version"
+  printf "  ${C_COMMAND}%-14s${C_RESET} %s\n" "doctor --fix" "Auto-fix detected issues"
   printf "  ${C_COMMAND}%-14s${C_RESET} %s\n" "version" "Show version information"
   printf "  ${C_COMMAND}%-14s${C_RESET} %s\n" "release-notes" "Show release notes"
   printf "  ${C_COMMAND}%-14s${C_RESET} %s\n" "help" "Show this message"
@@ -306,12 +306,14 @@ cmd_release_notes() {
     # Bullet points with bold labels (- **Label**: description)
     elif [[ "$line" =~ ^-[[:space:]]\*\*([^*]+)\*\*:[[:space:]](.+)$ ]]; then
       local label="${BASH_REMATCH[1]}"
-      local desc=$(_strip_md "${BASH_REMATCH[2]}")
+      local desc
+      desc=$(_strip_md "${BASH_REMATCH[2]}")
       printf "    ${C_LABEL}%-18s${C_RESET} %s\n" "$label" "$desc"
     # Bullet points with bold labels (- **Label** description without colon)
     elif [[ "$line" =~ ^-[[:space:]]\*\*([^*]+)\*\*[[:space:]]?(.*)$ ]]; then
       local label="${BASH_REMATCH[1]}"
-      local desc=$(_strip_md "${BASH_REMATCH[2]}")
+      local desc
+      desc=$(_strip_md "${BASH_REMATCH[2]}")
       if [[ -n "$desc" ]]; then
         printf "    ${C_LABEL}%-18s${C_RESET} %s\n" "$label" "$desc"
       else
@@ -319,11 +321,13 @@ cmd_release_notes() {
       fi
     # Plain bullet points
     elif [[ "$line" =~ ^-[[:space:]](.+)$ ]]; then
-      local item=$(_strip_md "${BASH_REMATCH[1]}")
+      local item
+      item=$(_strip_md "${BASH_REMATCH[1]}")
       printf "    • %s\n" "$item"
     # Numbered list items
     elif [[ "$line" =~ ^[0-9]+\.[[:space:]](.+)$ ]]; then
-      local item=$(_strip_md "${BASH_REMATCH[1]}")
+      local item
+      item=$(_strip_md "${BASH_REMATCH[1]}")
       printf "    %s\n" "$item"
     # Commit lines (special case: backtick-wrapped hash)
     elif [[ "$line" =~ ^\`([a-f0-9]+)\`[[:space:]](.+)$ ]]; then
@@ -339,7 +343,8 @@ cmd_release_notes() {
       echo ""
     # Everything else - strip markdown and print
     else
-      local clean=$(_strip_md "$line")
+      local clean
+      clean=$(_strip_md "$line")
       [[ -n "$clean" ]] && printf "  %s\n" "$clean"
     fi
   done
@@ -534,7 +539,7 @@ cmd_ps() {
   declare -A container_name  # container_id -> name
   declare -a projects  # ordered list of projects
 
-  while IFS='|' read -r cid cname local_folder status; do
+  while IFS='|' read -r cid cname local_folder _status; do
     container_name["$cid"]="$cname"
 
     # Check if this is a work-lab container
@@ -588,7 +593,12 @@ cmd_ps() {
     local project_name
     project_name=$(basename "$project")
 
-    printf "\n${C_ACCENT}%s/${C_RESET}\n" "$project_name"
+    # Show gold star for current project
+    if [[ "$project" == "$current_project" ]]; then
+      printf "\n${C_ACCENT}%s/${C_RESET} ${C_CURRENT}★${C_RESET}\n" "$project_name"
+    else
+      printf "\n${C_ACCENT}%s/${C_RESET}\n" "$project_name"
+    fi
 
     local wl_ids="${worklabs_for_project[$project]:-}"
     local dc_id="${devcontainer_for_project[$project]:-}"
@@ -828,7 +838,7 @@ cmd_mux() {
   fi
 
   # Check if configured mux is available in container
-  if ! docker exec "$container_id" command -v "$WORK_LAB_MUX" &>/dev/null; then
+  if ! docker exec "$container_id" which "$WORK_LAB_MUX" &>/dev/null; then
     status_fail "$WORK_LAB_MUX not found in container"
     if [[ "$WORK_LAB_MUX" == "zellij" ]]; then
       action "Install zellij in ${C_COMMAND}~/.config/work-lab/post-create.sh${C_ACTION}"
@@ -929,7 +939,7 @@ cmd_dc() {
   ensure_ssh_tunnel "$project_path" 2>/dev/null || true
 
   # Find the project's devcontainer using path-matching
-  local dc_id exact_match="" fallback_match=""
+  local dc_id=""
 
   # Try exact path match first, then project name match
   while IFS= read -r cid; do
@@ -947,33 +957,20 @@ cmd_dc() {
 
     # Check for exact path match
     if [[ "$local_folder" == "$project_path" ]]; then
-      exact_match="$cid"
+      dc_id="$cid"
       break
     fi
 
-    # Check for project name match
+    # Check for project name match (same basename)
     if [[ -n "$local_folder" ]]; then
       local folder_name
       folder_name=$(basename "$local_folder")
       if [[ "$folder_name" == "$project_name" ]]; then
-        exact_match="$cid"
+        dc_id="$cid"
         break
       fi
     fi
-
-    # Store first non-work-lab container as fallback
-    if [[ -z "$fallback_match" ]]; then
-      fallback_match="$cid"
-    fi
   done < <(docker ps --filter "label=devcontainer.local_folder" --format '{{.ID}}' 2>/dev/null)
-
-  # Use exact match if found, otherwise fallback
-  if [[ -n "$exact_match" ]]; then
-    dc_id="$exact_match"
-  elif [[ -n "$fallback_match" ]]; then
-    dc_id="$fallback_match"
-    status_warn "No exact devcontainer match, using first available"
-  fi
 
   if [[ -z "$dc_id" ]]; then
     status_fail "Project devcontainer not running"
@@ -1122,62 +1119,12 @@ check_for_update() {
   return 1  # up to date
 }
 
-cmd_upgrade() {
-  local latest installed_via_homebrew=false
-
-  header "Checking for updates..."
-
-  # force fresh fetch (bypass cache)
-  latest=$(_fetch_latest_version) || latest=""
-  if [[ -z "$latest" ]]; then
-    status_fail "Could not fetch latest version"
-    action "Check network connection"
-    action "Releases: ${C_COMMAND}https://github.com/modern-tooling/work-lab/releases${C_ACTION}"
-    fail_exit
-  fi
-
-  # update cache
-  _save_cached_version "$latest"
-
-  printf "  ${C_LABEL}current${C_RESET}   ${C_COMMAND}v%s${C_RESET}\n" "$VERSION"
-  printf "  ${C_LABEL}latest${C_RESET}    ${C_COMMAND}v%s${C_RESET}\n" "$latest"
-  echo ""
-
-  if ! _version_lt "$VERSION" "$latest"; then
-    status_ok "Already up to date"
-    return 0
-  fi
-
-  # check installation method
-  if command -v brew &>/dev/null && brew list work-lab &>/dev/null 2>&1; then
-    installed_via_homebrew=true
-  fi
-
-  if [[ "$installed_via_homebrew" == "true" ]]; then
-    status_info "Installed via Homebrew"
-    activity "Running brew upgrade work-lab..."
-    echo ""
-    if brew upgrade work-lab; then
-      echo ""
-      status_ok "Upgraded to v$latest"
-    else
-      echo ""
-      status_fail "Upgrade failed"
-      action "Manual: ${C_COMMAND}brew upgrade work-lab${C_ACTION}"
-      fail_exit
-    fi
-  else
-    status_info "Not installed via Homebrew"
-    echo ""
-    print_accent "To upgrade, re-run the installer:"
-    echo ""
-    printf "  ${C_COMMAND}curl -fsSL https://raw.githubusercontent.com/modern-tooling/work-lab/main/install.sh | bash${C_RESET}\n"
-    echo ""
-    action "Docs: ${C_COMMAND}https://github.com/modern-tooling/work-lab#installation${C_ACTION}"
-  fi
-}
-
 cmd_doctor() {
+  local fix_mode=false
+  if [[ "${1:-}" == "--fix" ]]; then
+    fix_mode=true
+  fi
+
   # Inside container: show container-specific diagnostics
   if is_inside_container; then
     banner "work-lab doctor (inside container)"
@@ -1227,16 +1174,25 @@ cmd_doctor() {
     return 0
   fi
 
-  local container_id config_dir errors=0
+  local container_id config_dir errors=0 fixes_applied=0
   local mount_spec src_path tgt_path
 
-  banner "work-lab doctor"
+  if [[ "$fix_mode" == "true" ]]; then
+    banner "work-lab doctor --fix"
+  else
+    banner "work-lab doctor"
+  fi
 
   # check for updates first (most critical info)
   header "Updates"
   if check_for_update; then
     status_warn "v$UPDATE_LATEST_VERSION available (current: v$VERSION)"
-    action "Update: ${C_COMMAND}work-lab upgrade${C_ACTION}"
+    # show appropriate upgrade instructions based on installation method
+    if [[ "$REPO_DIR" == */Cellar/work-lab/* ]]; then
+      action "Upgrade: ${C_COMMAND}brew upgrade work-lab${C_ACTION}"
+    else
+      action "Releases: ${C_COMMAND}https://github.com/modern-tooling/work-lab/releases${C_ACTION}"
+    fi
   else
     status_ok "up to date (v$VERSION)"
   fi
@@ -1246,7 +1202,7 @@ cmd_doctor() {
   if [[ "$REPO_DIR" == */Cellar/work-lab/* ]]; then
     status_ok "Homebrew"
   elif [[ "$REPO_DIR" == "$HOME/.local/share/work-lab" ]]; then
-    status_ok "~/.local/share/work-lab"
+    status_ok "\$HOME/.local/share/work-lab"
   else
     status_ok "$(basename "$REPO_DIR")"
     detail "$REPO_DIR"
@@ -1280,9 +1236,22 @@ cmd_doctor() {
   if command -v devcontainer &>/dev/null; then
     status_ok "devcontainer CLI: $(devcontainer --version 2>/dev/null || echo 'installed')"
   else
-    status_fail "devcontainer CLI: not found"
-    action "Install: ${C_COMMAND}npm install -g @devcontainers/cli${C_ACTION}"
-    ((errors++)) || true
+    if [[ "$fix_mode" == "true" ]] && command -v npm &>/dev/null; then
+      status_warn "devcontainer CLI: not found"
+      activity "Installing devcontainer CLI..."
+      if npm install -g @devcontainers/cli 2>/dev/null; then
+        status_ok "devcontainer CLI: installed"
+        ((fixes_applied++)) || true
+      else
+        status_fail "devcontainer CLI: install failed"
+        action "Manual install: ${C_COMMAND}npm install -g @devcontainers/cli${C_ACTION}"
+        ((errors++)) || true
+      fi
+    else
+      status_fail "devcontainer CLI: not found"
+      action "Install: ${C_COMMAND}npm install -g @devcontainers/cli${C_ACTION}"
+      ((errors++)) || true
+    fi
   fi
 
   # check container status
@@ -1294,6 +1263,46 @@ cmd_doctor() {
     else
       status_info "not running"
       action "Run ${C_COMMAND}work-lab start${C_ACTION}"
+    fi
+  else
+    status_skip "cannot check (docker not available)"
+  fi
+
+  # check for stale containers (local_folder path no longer exists)
+  header "Stale containers"
+  if command -v docker &>/dev/null && docker info &>/dev/null; then
+    local stale_containers=() cid local_folder cname
+    while IFS='|' read -r cid cname local_folder; do
+      [[ -z "$cid" ]] && continue
+      # check if the local_folder path exists
+      if [[ -n "$local_folder" ]] && [[ ! -d "$local_folder" ]]; then
+        stale_containers+=("$cid|$cname|$local_folder")
+      fi
+    done < <(docker ps -a --filter "label=devcontainer.local_folder" \
+      --format "{{.ID}}|{{.Names}}|{{.Label \"devcontainer.local_folder\"}}" 2>/dev/null)
+
+    if (( ${#stale_containers[@]} == 0 )); then
+      status_ok "none found"
+    else
+      for entry in "${stale_containers[@]}"; do
+        IFS='|' read -r cid cname local_folder <<< "$entry"
+        if [[ "$fix_mode" == "true" ]]; then
+          status_warn "removing stale: ${cname} (${cid:0:12})"
+          detail "path no longer exists: $local_folder"
+          if docker rm -f "$cid" &>/dev/null; then
+            status_ok "removed: ${cname}"
+            ((fixes_applied++)) || true
+          else
+            status_fail "failed to remove: ${cname}"
+            ((errors++)) || true
+          fi
+        else
+          status_warn "stale: ${cname} (${cid:0:12})"
+          detail "path no longer exists: $local_folder"
+          action "Remove: ${C_COMMAND}docker rm -f ${cid:0:12}${C_ACTION}"
+          ((errors++)) || true
+        fi
+      done
     fi
   else
     status_skip "cannot check (docker not available)"
@@ -1400,7 +1409,7 @@ cmd_doctor() {
       status_info "post-start.sh (not found)"
     fi
   else
-    status_info "~/.config/work-lab/ not found (optional)"
+    status_info "\$HOME/.config/work-lab/ not found (optional)"
   fi
 
   # mode detection and sidecar status
@@ -1425,8 +1434,23 @@ cmd_doctor() {
             status_ok "SSH tunnel: configured"
             tip "SSH to devcontainer: ${C_COMMAND}prefix + S${C_TIP} in tmux"
           else
-            status_info "SSH tunnel: not configured"
-            action "Setup: ${C_COMMAND}docs/ssh-tunneling.md${C_ACTION}"
+            if [[ "$fix_mode" == "true" ]]; then
+              status_info "SSH tunnel: not configured"
+              activity "Setting up SSH tunnel..."
+              if ensure_ssh_tunnel "$git_root" 2>/dev/null; then
+                if check_project_ssh_tunnel "$git_root"; then
+                  status_ok "SSH tunnel: configured"
+                  ((fixes_applied++)) || true
+                else
+                  status_warn "SSH tunnel: could not configure (devcontainer may lack sshd)"
+                fi
+              else
+                status_warn "SSH tunnel: setup failed"
+              fi
+            else
+              status_info "SSH tunnel: not configured"
+              action "Setup: ${C_COMMAND}docs/ssh-tunneling.md${C_ACTION}"
+            fi
           fi
         else
           status_warn "project devcontainer: not running"
@@ -1444,8 +1468,14 @@ cmd_doctor() {
   # summary
   echo ""
   separator
+  if [[ "$fix_mode" == "true" ]] && (( fixes_applied > 0 )); then
+    print_pass "Applied $fixes_applied fix(es)."
+  fi
   if (( errors > 0 )); then
     print_fail "Found $errors error(s). Fix them before running 'work-lab start'."
+    if [[ "$fix_mode" != "true" ]]; then
+      action "Auto-fix: ${C_COMMAND}work-lab doctor --fix${C_ACTION}"
+    fi
     INTENTIONAL_EXIT=1
     return 1
   else
@@ -1477,10 +1507,8 @@ case "${1:-}" in
     cmd_dc "$@"
     ;;
   doctor)
-    cmd_doctor
-    ;;
-  upgrade)
-    cmd_upgrade
+    shift
+    cmd_doctor "$@"
     ;;
   version|--version|-v)
     cmd_version

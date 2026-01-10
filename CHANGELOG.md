@@ -6,6 +6,17 @@ All notable changes to work-lab will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.0] - 2026-01-09
+
+### Added
+
+- **`wl doctor --fix`**: Auto-fix detectable issues (stale containers, SSH tunnel setup, missing devcontainer CLI)
+- **Stale container detection**: `wl doctor` finds orphaned containers from deleted/moved projects
+
+### Removed
+
+- **`wl upgrade`**: Use your package manager instead (`brew upgrade work-lab`)
+
 ## [0.5.0] - 2026-01-09
 
 ### Changed
